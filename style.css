@@ -161,3 +161,44 @@ svg.chart { width: 100%; height: auto; display: block; }
 .hr { height: 1px; background: var(--card-border); margin: 16px 0; border: none; }
 .center { text-align: center; }
 .spacer { height: 8px; }
+
+/* Branding Header */
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 4px 0 16px;
+}
+.brand-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  object-fit: cover;
+}
+.brand-info {
+  display: flex;
+  flex-direction: column;
+}
+.brand-info h1 {
+  margin: 0;
+}
+
+/* Settings branding footer */
+.settings-footer {
+  margin-top: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.settings-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}

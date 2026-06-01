@@ -181,11 +181,17 @@
 
     // header
     const curWeek = weeks[(plan.week || 1) - 1];
-    view.appendChild(el('h1', null, [curWeek ? `Week ${curWeek.weekNumber} · ${curWeek.blockName}` : cycle.name]));
     const nextTest = weeks.find(w => w.isDeloadTest && w.weekNumber >= (plan.week || 1));
-    view.appendChild(el('p', { class: 'sub' }, [
-      nextTest ? `Next benchmark test: Week ${nextTest.weekNumber} (${fmtDate(nextTest.startDate)})` : 'No upcoming test'
-    ]));
+    const headerRow = el('div', { class: 'brand-header' }, [
+      el('img', { class: 'brand-logo', src: 'icons/icon-192.png', alt: 'Finger Trainer Logo' }),
+      el('div', { class: 'brand-info' }, [
+        el('h1', null, [curWeek ? `Week ${curWeek.weekNumber} · ${curWeek.blockName}` : cycle.name]),
+        el('p', { class: 'sub' }, [
+          nextTest ? `Next benchmark test: Week ${nextTest.weekNumber} (${fmtDate(nextTest.startDate)})` : 'No upcoming test'
+        ])
+      ])
+    ]);
+    view.appendChild(headerRow);
 
     // pending next-day-feel prompt
     const pending = await DB.getMeta('pendingNextDayFeel');
@@ -614,7 +620,12 @@
     view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.exportCSV() }, ['Export CSV']));
     view.appendChild(el('div', { class: 'spacer' }));
     view.appendChild(el('button', { class: 'btn danger', onclick: () => App.resetData() }, ['Reset all data']));
-    view.appendChild(el('p', { class: 'muted center', style: 'margin-top:18px' }, ['Finger Trainer · offline PWA · single user']));
+
+    const footer = el('div', { class: 'settings-footer' }, [
+      el('img', { class: 'settings-logo', src: 'icons/icon-192.png', alt: 'Finger Trainer Logo' }),
+      el('p', { class: 'muted center', style: 'margin:0' }, ['Finger Trainer · offline PWA · single user'])
+    ]);
+    view.appendChild(footer);
   }
 
   function wmEditor(label, duration, current) {

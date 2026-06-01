@@ -1,5 +1,5 @@
 /* sw.js — offline app-shell cache. Bump CACHE on any asset change. */
-const CACHE = 'finger-trainer-v3';
+const CACHE = 'finger-trainer-v4';
 const ASSETS = [
   './',
   './index.html',
