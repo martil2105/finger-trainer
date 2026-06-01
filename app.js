@@ -621,6 +621,7 @@
     body.push(el('div', { class: 'field' }, [el('label', null, ['Notes']), notes]));
 
     body.push(el('button', { class: 'btn', onclick: async () => {
+      const blk = e.block || await blockNameFor(state.date);
       const entry = {
         id: e.id || Templates.uid(), date: state.date, type: state.type, role: state.role, venue: state.venue,
         hangDurationSeconds: state.type === 'Yielding' ? state.hangDurationSeconds : null, grip: state.grip,
@@ -628,7 +629,7 @@
         topSetRPE: state.type === 'Yielding' ? rpeSt.getValue() : null,
         sets: setsSt.getValue(), bodyweightKg: e.bodyweightKg || null,
         taxing: taxR.getValue(), feltStrong: feltR.getValue(), nextDayFeel: state.ndf != null ? state.ndf : (e.nextDayFeel || null),
-        block: e.block || blockNameFor(state.date), notes: state.notes
+        block: blk || '', notes: state.notes
       };
       await DB.addLog(entry);
       // benchmark capture for Test role
@@ -707,37 +708,55 @@
     });
     input.click();
   };
+  // Normalize role names so imported data lines up with the app's conventions.
+  function normalizeRole(role, type) {
+    const r = (role || '').trim();
+    if (r === 'OI') return 'OIprimer';
+    if (r) return r;
+    // blank role: infer a sensible default from type
+    if (type === 'Climbing') return 'Climb';
+    if (type === 'OI') return 'OIprimer';
+    return ''; // leave Yielding blanks unassigned rather than guessing Heavy vs Volume
+  }
+  function num(v) { return (v != null && v !== '') ? +v : null; }
+
   async function doImport(text) {
     const lines = parseCSV(text);
     if (!lines.length) return;
     const header = lines[0].map(h => h.trim());
     const idx = {}; header.forEach((h, i) => idx[h] = i);
+    // Index existing entries by date so re-importing updates in place (idempotent)
+    // rather than creating duplicates of the seeded history.
     const existing = await DB.getAll('logEntries');
-    const seen = new Set(existing.map(e => e.date + '|' + (e.role || '')));
-    let added = 0, skipped = 0;
+    const byDate = {};
+    existing.forEach(e => { (byDate[e.date] = byDate[e.date] || []).push(e); });
+    let added = 0, updated = 0;
     for (let r = 1; r < lines.length; r++) {
       const c = lines[r]; if (!c.length || !c[idx.date]) continue;
+      const date = c[idx.date].trim();
       const type = c[idx.type] || 'Yielding';
-      const role = c[idx.role] || '';
-      const key = c[idx.date] + '|' + role;
-      if (seen.has(key)) { skipped++; continue; }
-      let dur = c[idx.hangDurationSeconds] ? +c[idx.hangDurationSeconds] : (type === 'Yielding' ? 5 : null);
-      const load = c[idx.loadKg] !== '' ? +c[idx.loadKg] : null;
-      const rpe = c[idx.rpe] !== '' ? +c[idx.rpe] : null;
-      let e1 = c[idx.e1rmKg] !== '' && c[idx.e1rmKg] != null ? +c[idx.e1rmKg] : null;
+      const role = normalizeRole(c[idx.role], type);
+      const dur = c[idx.hangDurationSeconds] ? +c[idx.hangDurationSeconds] : (type === 'Yielding' ? 5 : null);
+      const load = num(c[idx.loadKg]);
+      const rpe = num(c[idx.rpe]);
+      let e1 = num(c[idx.e1rmKg]);
       if (e1 == null && type === 'Yielding') e1 = Calc.e1rm(load, rpe);
-      await DB.put('logEntries', {
-        id: Templates.uid(), date: c[idx.date], type, role, venue: c[idx.venue] || '',
-        hangDurationSeconds: dur, grip: 'HalfCrimp', topSetLoadKg: load, topSetRPE: rpe,
-        sets: c[idx.sets] !== '' ? +c[idx.sets] : null, bodyweightKg: null,
-        taxing: c[idx.taxing] !== '' ? +c[idx.taxing] : null,
-        feltStrong: c[idx.feltStrong] !== '' ? +c[idx.feltStrong] : null,
-        nextDayFeel: c[idx.nextDayFeel] !== '' ? +c[idx.nextDayFeel] : null,
-        block: c[idx.block] || '', notes: c[idx.notes] || '', e1rmKg: e1
-      });
-      seen.add(key); added++;
+      // match an existing entry on date (+ role if it disambiguates same-day sessions)
+      const sameDay = byDate[date] || [];
+      let match = sameDay.find(e => (e.role || '') === role) || (sameDay.length === 1 ? sameDay[0] : null);
+      const entry = {
+        id: match ? match.id : Templates.uid(), date, type, role, venue: c[idx.venue] || '',
+        hangDurationSeconds: dur, grip: (match && match.grip) || 'HalfCrimp',
+        topSetLoadKg: load, topSetRPE: rpe, sets: num(c[idx.sets]), bodyweightKg: (match && match.bodyweightKg) || null,
+        taxing: num(c[idx.taxing]), feltStrong: num(c[idx.feltStrong]),
+        nextDayFeel: num(c[idx.nextDayFeel]) != null ? num(c[idx.nextDayFeel]) : (match ? match.nextDayFeel : null),
+        block: c[idx.block] || (match && match.block) || '', notes: c[idx.notes] || '', e1rmKg: e1
+      };
+      await DB.put('logEntries', entry);
+      if (match) { updated++; const i2 = sameDay.indexOf(match); if (i2 >= 0) sameDay.splice(i2, 1); }
+      else { (byDate[date] = byDate[date] || []).push(entry); added++; }
     }
-    App.confirm(`Import complete: ${added} added, ${skipped} skipped (duplicate date+role).`, 'OK', () => App.render());
+    App.confirm(`Import complete: ${added} added, ${updated} updated.`, 'OK', () => App.render());
   }
   // minimal CSV parser (handles quoted fields + commas + escaped quotes)
   function parseCSV(text) {
