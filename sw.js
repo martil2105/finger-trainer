@@ -1,52 +1,45 @@
-const CACHE_NAME = "ft-cache-v1";
+/* sw.js — offline app-shell cache. Bump CACHE on any asset change. */
+const CACHE = 'finger-trainer-v1';
 const ASSETS = [
-  "index.html",
-  "style.css",
-  "app.js",
-  "timer.js",
-  "manifest.json"
+  './',
+  './index.html',
+  './style.css',
+  './calc.js',
+  './templates.js',
+  './db.js',
+  './timer.js',
+  './builder.js',
+  './app.js',
+  './manifest.json',
+  './icons/icon-192.png',
+  './icons/icon-512.png'
 ];
 
-// Install Event - cache assets
-self.addEventListener("install", (e) => {
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log("Caching assets...");
-      return cache.addAll(ASSETS);
-    }).then(() => self.skipWaiting())
+    caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Activate Event - clear old caches
-self.addEventListener("activate", (e) => {
-  e.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            console.log("Clearing old cache:", key);
-            return caches.delete(key);
-          }
-        })
-      );
-    })
-  );
-  return self.clients.claim();
-});
-
-// Fetch Event - network fallback to cache
-self.addEventListener("fetch", (e) => {
+// Cache-first for app shell; network fallback fills cache for same-origin GETs.
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(e.request).catch(() => {
-        // Fallback for document request when offline
-        if (e.request.mode === "navigate") {
-          return caches.match("index.html");
+    caches.match(req).then((cached) => {
+      if (cached) return cached;
+      return fetch(req).then((res) => {
+        if (res && res.status === 200 && new URL(req.url).origin === location.origin) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
         }
-      });
+        return res;
+      }).catch(() => cached);
     })
   );
 });
