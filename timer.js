@@ -122,7 +122,8 @@
       body: `<div class="phase">Get ready</div>
              <div style="font-size:22px;margin:14px 0;font-weight:700">${p.role}</div>
              <div style="color:#9a9aa8">${lines.join(' · ')}</div>
-             ${p.protocol === 'fixedVolume' ? '<div style="color:#f7b955;margin-top:14px">Fixed sets — no extensions.</div>' : ''}
+             ${p.protocol === 'fixedVolume' ? '<div style="color:#f7b955;margin-top:14px">Fixed sets — no extensions. RPE creep: if @8.5+ by set 3, drop load 5%.</div>' : ''}
+             ${p.protocol === 'topSetPlusBackoffs' ? '<div style="color:#f7b955;margin-top:14px">Fatigue stop rule is active for back-offs.</div>' : ''}
              ${p.protocol === 'maxSingles' ? '<div style="color:#ff6b6b;margin-top:14px">Max singles — full rest, no back-offs.</div>' : ''}`,
       foot: `<button class="btn" id="r-ready">Ready — start countdown</button>
              <p class="muted center">Keep the screen on. Audio cues will guide you.</p>`
@@ -186,7 +187,7 @@
       // protocol-specific guidance
       if (p.protocol === 'topSetPlusBackoffs' && R.effort === 0) {
         const note = document.createElement('div'); note.className = 'callout';
-        note.textContent = `Back-offs from here ~${p.backoffAnchor != null ? p.backoffAnchor : '?'} kg (@7–8, ~4–5 kg below). Stop if RPE creeps above @8 or grip breaks before ${R.hangSeconds}s.`;
+        note.textContent = `Back-offs from here ~${p.backoffAnchor != null ? p.backoffAnchor : '?'} kg (@7–8). Halt back-offs if: (1) can't hold full 5s, (2) load drop >5% to stay @8, (3) grip breaks before second 4, (4) any joint discomfort.`;
         body.appendChild(note);
       }
       R._steppers = { loadSt, rpeSt };
@@ -206,9 +207,26 @@
   function recordEffort() {
     const p = R.plan;
     if (R._steppers) {
-      R.sets.push({ load: R._steppers.loadSt.getValue(), rpe: R._steppers.rpeSt.getValue() });
+      const loggedLoad = R._steppers.loadSt.getValue();
+      const loggedRPE = R._steppers.rpeSt.getValue();
+      R.sets.push({ load: loggedLoad, rpe: loggedRPE });
+
+      // Volume session RPE creep rule: if @8.5+ by set 3, drop load 5% and finish
+      if (p.protocol === 'fixedVolume' && R.effort === 2 && loggedRPE >= 8.5) {
+        const nextLoad = R.curLoad != null ? Calc.roundTo05(R.curLoad * 0.95) : null;
+        const msg = nextLoad != null
+          ? `RPE reached @${loggedRPE} on set 3. The RPE creep rule says drop load 5% (~${nextLoad} kg) for remaining sets. Drop load?`
+          : `RPE reached @${loggedRPE} on set 3. The RPE creep rule says drop load 5% for remaining sets. Drop load?`;
+        return App.confirm(
+          msg,
+          'Drop load',
+          () => { if (nextLoad != null) R.curLoad = nextLoad; advance(); },
+          () => advance()
+        );
+      }
+
       // fatigue-stop suggestion for back-offs: above @8 -> offer to stop, else continue.
-      if (p.protocol === 'topSetPlusBackoffs' && R.effort >= 1 && R._steppers.rpeSt.getValue() > 8) {
+      if (p.protocol === 'topSetPlusBackoffs' && R.effort >= 1 && loggedRPE > 8) {
         return App.confirm(
           'That back-off was above @8 — the fatigue-stop rule says stop here. End back-offs now?',
           'End back-offs',

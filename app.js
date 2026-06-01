@@ -318,7 +318,14 @@
       c.appendChild(el('p', { class: 'muted' }, [
         `3–5 quality singles only. 4–5 min full rest between efforts. ${rpeNote} Fatigue stop: load must drop >5% to maintain @9, grip breaks before second 2s, or any joint discomfort.`
       ]));
-    } else if (plan.role === 'Heavy' || plan.role === 'Test') {
+    } else if (plan.role === 'Heavy') {
+      c.appendChild(el('div', { class: 'callout' }, [
+        `Find today's @${plan.rpe}. This kg is a reference, not a target — RPE leads.`
+      ]));
+      c.appendChild(el('p', { class: 'muted' }, [
+        `Fatigue stop: halt back-offs if (1) can't hold full 5s at back-off load, (2) load must drop >5% to stay @8, (3) grip breaks before second 4, (4) any joint discomfort.`
+      ]));
+    } else if (plan.role === 'Test') {
       c.appendChild(el('div', { class: 'callout' }, [
         `Find today's @${plan.rpe}. This kg is a reference, not a target — RPE leads.`
       ]));
@@ -326,6 +333,9 @@
     if (plan.role === 'Volume') {
       c.appendChild(el('div', { class: 'callout' }, [
         `Fixed ${plan.sets} sets — no extensions, even if it feels easy. Tendon management.`
+      ]));
+      c.appendChild(el('p', { class: 'muted' }, [
+        `RPE creep rule: if RPE creeps to @8.5+ by set 3, drop load 5% and finish remaining sets. End early only if joint discomfort.`
       ]));
     }
     if (plan.note) c.appendChild(el('p', { class: 'muted' }, [plan.note]));
