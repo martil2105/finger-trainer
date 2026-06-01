@@ -68,6 +68,9 @@
       let totalEfforts;
       if (plan.protocol === 'topSetPlusBackoffs') { totalEfforts = 1 + (plan.sets || 0); }
       else if (plan.protocol === 'test') { totalEfforts = (plan.testDurations || [plan.duration]).length; }
+      else if (plan.protocol === 'oi' && typeof plan.sets === 'string' && plan.sets.includes('-')) {
+        totalEfforts = parseInt(plan.sets.split('-')[1], 10) || 5;
+      }
       else { totalEfforts = plan.sets || 1; }
 
       R = {
@@ -95,6 +98,7 @@
     if (p.protocol === 'fixedVolume') return `Set ${R.effort + 1}/${R.totalEfforts}`;
     if (p.protocol === 'test') return `Test ${R.plan.testDurations[R.effort]}s`;
     if (p.protocol === 'deload') return `Deload set ${R.effort + 1}/3`;
+    if (p.protocol === 'oi' && p.sets === '3-5') return `Set ${R.effort + 1}/3–5`;
     return `Effort ${R.effort + 1}`;
   }
 
@@ -183,7 +187,7 @@
 
     if (!isOI) {
       const loadSt = App.stepper({ min: 0, max: 80, step: 0.5, value: R.curLoad != null ? R.curLoad : 25, fmt: v => v + ' kg', onChange: v => R.curLoad = v });
-      const rpeSt = App.stepper({ min: 6, max: 10, step: 0.25, value: R.curRPE, fmt: v => '@' + v, onChange: v => R.curRPE = v });
+      const rpeSt = App.stepper({ min: 6, max: 10, step: 0.5, value: R.curRPE, fmt: v => '@' + v, onChange: v => R.curRPE = v });
       const grid = document.createElement('div'); grid.className = 'grid2';
       const f1 = document.createElement('div'); f1.className = 'field'; f1.innerHTML = '<label>Load</label>'; f1.appendChild(loadSt);
       const f2 = document.createElement('div'); f2.className = 'field'; f2.innerHTML = '<label>RPE</label>'; f2.appendChild(rpeSt);
@@ -247,6 +251,17 @@
       }
     } else {
       R.sets.push({ load: null, rpe: null });
+      if (p.protocol === 'oi' && p.sets === '3-5') {
+        if (R.effort === 2 || R.effort === 3) {
+          return App.confirm(
+            `You have completed ${R.effort + 1} sets. The target is 3–5 sets. Do you want to perform another set?`,
+            'Do another set',
+            () => advance(),
+            () => { R.phase = 'END'; renderEnd(); },
+            'Finish session'
+          );
+        }
+      }
     }
     advance();
   }
@@ -305,10 +320,8 @@
     const save = document.createElement('button'); save.className = 'btn'; save.textContent = 'Save & close';
     save.addEventListener('click', async () => {
       const top = R.sets.find(s => s.load != null) || {};
-      // back-off count for Heavy = efforts after top set; volume/peak = sets done
-      let setsCount;
-      if (R.plan.protocol === 'topSetPlusBackoffs') setsCount = Math.max(0, R.sets.length - 1);
-      else setsCount = R.sets.length;
+      // Log all completed sets (including top set for Heavy sessions)
+      const setsCount = R.sets.length;
       releaseWakeLock();
       host().innerHTML = '';
       await App.logSession(R.plan, {

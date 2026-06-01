@@ -103,7 +103,7 @@
           ? Math.round(lerp(block.volume.pctStart, block.volume.pctEnd, f) * 100) / 100
           : null;
         wk.volumeSets = block.volume ? block.volume.sets : 0;
-        wk.oiSets = block.oi ? block.oi.sets : 3;
+        wk.oiSets = (block.oi && block.oi.sets !== undefined) ? block.oi.sets : '3-5';
       }
       weeks.push(wk);
     }

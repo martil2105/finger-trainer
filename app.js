@@ -148,7 +148,7 @@
     }
     if (structRole === 'OIprimer') {
       return { rest: false, role: 'OIprimer', week: wk, blockName: week.blockName,
-        duration: null, rpe: null, protocol: 'oi', sets: week.oiSets, anchor: null,
+        duration: null, rpe: null, protocol: 'oi', sets: week.oiSets === 3 ? '3-5' : week.oiSets, anchor: null,
         note: 'Overcoming isometrics — max-intent press/pull against a fixed surface, ~5s. Neural primer, then limit board.' };
     }
     return { rest: true, week: wk, blockName: week.blockName };
@@ -327,7 +327,7 @@
       ]));
     } else if (plan.role === 'Heavy') {
       c.appendChild(el('div', { class: 'callout' }, [
-        `Find today's @${plan.rpe}. This kg is a reference, not a target — RPE leads.`
+        `Find today's top set — RPE leads (target @${plan.rpe}). WM anchor: ~${plan.anchor} kg. Load up/down freely. Back-offs: ${plan.sets} sets at genuinely @7–8 (~${plan.anchor - plan.backoffAnchor} kg lighter than top).`
       ]));
       c.appendChild(el('p', { class: 'muted' }, [
         `Fatigue stop: halt back-offs if (1) can't hold full 5s at back-off load, (2) load must drop >5% to stay @8, (3) grip breaks before second 4, (4) any joint discomfort.`
@@ -465,7 +465,7 @@
       // OI primer (Tue)
       const oiPlan = {
         rest: false, role: 'OIprimer', week: w.weekNumber, blockName: w.blockName,
-        duration: null, rpe: null, protocol: 'oi', sets: w.oiSets, anchor: null,
+        duration: null, rpe: null, protocol: 'oi', sets: w.oiSets === 3 ? '3-5' : w.oiSets, anchor: null,
         note: 'Overcoming isometrics — max-intent press/pull against a fixed surface, ~5s. Neural primer, then limit board.'
       };
       body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(oiPlan); } }, [
@@ -473,7 +473,7 @@
           el('strong', null, ['OI primer + Board (Tue)']),
           el('span', { class: 'pill accent' }, ['Start →'])
         ]),
-        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.oiSets} sets overcoming isometrics + limit board bouldering`])
+        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.oiSets === 3 ? '3-5' : w.oiSets} sets overcoming isometrics + limit board bouldering`])
       ]));
     }
     App.sheet(`Week ${w.weekNumber}`, body);
@@ -724,12 +724,12 @@
     return c;
   }
 
-  App.confirm = function (msg, okLabel, onOk, onCancel) {
+  App.confirm = function (msg, okLabel, onOk, onCancel, cancelLabel) {
     App.sheet('', [
       el('p', null, [msg]),
       el('button', { class: 'btn', onclick: () => { App.closeSheet(); onOk && onOk(); } }, [okLabel || 'OK']),
       el('div', { class: 'spacer' }),
-      el('button', { class: 'btn secondary', onclick: () => { App.closeSheet(); onCancel && onCancel(); } }, ['Cancel'])
+      el('button', { class: 'btn secondary', onclick: () => { App.closeSheet(); onCancel && onCancel(); } }, [cancelLabel || 'Cancel'])
     ], onCancel);
   };
 
@@ -759,7 +759,7 @@
 
     // load + rpe steppers
     const loadSt = stepper({ min: 0, max: 80, step: 0.5, value: state.load || 0, fmt: v => v + ' kg', onChange: v => { state.load = v; updE1RM(); } });
-    const rpeSt = stepper({ min: 6, max: 10, step: 0.25, value: state.rpe || 8, fmt: v => '@' + v, onChange: v => { state.rpe = v; updE1RM(); } });
+    const rpeSt = stepper({ min: 6, max: 10, step: 0.5, value: state.rpe || 8, fmt: v => '@' + v, onChange: v => { state.rpe = v; updE1RM(); } });
     const setsSt = stepper({ min: 0, max: 10, step: 1, value: state.sets || 3, onChange: v => state.sets = v });
     body.push(el('div', { class: 'grid2' }, [
       el('div', { class: 'field' }, [el('label', null, ['Top set load']), loadSt]),

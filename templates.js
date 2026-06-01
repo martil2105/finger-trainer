@@ -15,13 +15,13 @@
       weeklyStructure: { mon: 'Rest', tue: 'OIprimer', wed: 'Rest', thu: 'Volume', fri: 'Rest', sat: 'Heavy', sun: 'Rest' },
       notes: 'Skips accumulation — straight into Transmutation given established base.',
       blocks: [
-        block('Transmutation I', 'Transmutation', 4, 5, 'topSetPlusBackoffs', 8.5, 9.0, 3, 3, 0.92, 5, 0.82, 0.85, 5, 3, 0.95),
+        block('Transmutation I', 'Transmutation', 4, 5, 'topSetPlusBackoffs', 8.5, 9.0, 3, 3, 0.92, 5, 0.82, 0.85, 5, '3-5', 0.95),
         deload('Deload + Test', [5]),
-        block('Transmutation II', 'Transmutation', 4, 5, 'topSetPlusBackoffs', 9.0, 9.5, 3, 2, 0.82, 5, 0.86, 0.88, 5, 3),
+        block('Transmutation II', 'Transmutation', 4, 5, 'topSetPlusBackoffs', 9.0, 9.5, 3, 2, 0.82, 5, 0.86, 0.88, 5, '3-5'),
         deload('Deload + Test', [5, 3]),
-        block('Peak Intensity', 'Peak', 4, 3, 'maxSingles', 9.5, 9.5, 3, 5, null, 5, 0.80, 0.82, 4, 3),
+        block('Peak Intensity', 'Peak', 4, 3, 'maxSingles', 9.5, 9.5, 3, 5, null, 5, 0.80, 0.82, 4, '3-5'),
         deload('Deload + Final Test', [5, 3]),
-        block('Realization', 'Realization', 1, 3, 'maxSingles', 9.0, 9.0, 2, 3, null, 5, 0.78, 0.80, 2, 3)
+        block('Realization', 'Realization', 1, 3, 'maxSingles', 9.0, 9.0, 2, 3, null, 5, 0.78, 0.80, 2, '3-5')
       ]
     };
   }
@@ -36,12 +36,12 @@
       weeklyStructure: { mon: 'Rest', tue: 'OIprimer', wed: 'Rest', thu: 'Volume', fri: 'Rest', sat: 'Heavy', sun: 'Rest' },
       notes: 'Properly periodized: duration is the lever, volume and intensity see-saw.',
       blocks: [
-        block('Accumulation', 'Accumulation', 8, 7, 'topSetPlusBackoffs', 7.0, 8.0, 4, 4, 0.82, 7, 0.85, 0.80, 6, 3),
+        block('Accumulation', 'Accumulation', 8, 7, 'topSetPlusBackoffs', 7.0, 8.0, 4, 4, 0.82, 7, 0.85, 0.80, 6, '3-5'),
         deload('Deload + Test', [7, 5]),
-        block('Transmutation', 'Transmutation', 5, 5, 'topSetPlusBackoffs', 8.5, 9.5, 3, 2, 0.82, 5, 0.82, 0.88, 5, 3),
+        block('Transmutation', 'Transmutation', 5, 5, 'topSetPlusBackoffs', 8.5, 9.5, 3, 2, 0.82, 5, 0.82, 0.88, 5, '3-5'),
         deload('Deload + Test', [5, 3]),
-        block('Peak', 'Peak', 3, 3, 'maxSingles', 9.5, 9.5, 3, 5, null, 5, 0.80, 0.78, 3, 3),
-        block('Realization', 'Realization', 1, 3, 'maxSingles', 9.0, 9.0, 2, 3, null, 5, 0.78, 0.78, 2, 3)
+        block('Peak', 'Peak', 3, 3, 'maxSingles', 9.5, 9.5, 3, 5, null, 5, 0.80, 0.78, 3, '3-5'),
+        block('Realization', 'Realization', 1, 3, 'maxSingles', 9.0, 9.0, 2, 3, null, 5, 0.78, 0.78, 2, '3-5')
       ]
     };
   }
@@ -56,7 +56,7 @@
       weeklyStructure: { mon: 'Rest', tue: 'OIprimer', wed: 'Rest', thu: 'Volume', fri: 'Rest', sat: 'Heavy', sun: 'Rest' },
       notes: '',
       blocks: [
-        block('Custom block', 'Custom', 4, 5, 'topSetPlusBackoffs', 8.0, 8.0, 3, 3, 0.82, 5, 0.82, 0.85, 4, 3)
+        block('Custom block', 'Custom', 4, 5, 'topSetPlusBackoffs', 8.0, 8.0, 3, 3, 0.82, 5, 0.82, 0.85, 4, '3-5')
       ]
     };
   }

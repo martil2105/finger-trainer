@@ -238,8 +238,8 @@
       dyn.appendChild(el('h2', null, ['Heavy']));
       dyn.appendChild(sel('Hang duration', ['7', '5', '3'], String(b.heavy.hangDurationSeconds), v => b.heavy.hangDurationSeconds = +v));
       dyn.appendChild(sel('Protocol', ['topSetPlusBackoffs', 'maxSingles', 'fixedVolume'], b.heavy.protocol, v => { b.heavy.protocol = v; rerender(); }));
-      const rpeS = App.stepper({ min: 6, max: 10, step: 0.25, value: b.heavy.rpeStart, fmt: v => '@' + v, onChange: v => b.heavy.rpeStart = v });
-      const rpeE = App.stepper({ min: 6, max: 10, step: 0.25, value: b.heavy.rpeEnd, fmt: v => '@' + v, onChange: v => b.heavy.rpeEnd = v });
+      const rpeS = App.stepper({ min: 6, max: 10, step: 0.5, value: b.heavy.rpeStart, fmt: v => '@' + v, onChange: v => b.heavy.rpeStart = v });
+      const rpeE = App.stepper({ min: 6, max: 10, step: 0.5, value: b.heavy.rpeEnd, fmt: v => '@' + v, onChange: v => b.heavy.rpeEnd = v });
       dyn.appendChild(el('div', { class: 'grid2' }, [
         el('div', { class: 'field' }, [el('label', null, ['RPE start']), rpeS]),
         el('div', { class: 'field' }, [el('label', null, ['RPE end']), rpeE])
@@ -272,8 +272,10 @@
 
       // OI
       dyn.appendChild(el('h2', null, ['OI primer']));
-      const oi = App.stepper({ min: 0, max: 8, step: 1, value: (b.oi && b.oi.sets) || 3, onChange: v => { b.oi = b.oi || {}; b.oi.sets = v; } });
-      dyn.appendChild(el('div', { class: 'field' }, [el('label', null, ['OI sets']), oi]));
+      dyn.appendChild(sel('OI sets', ['0', '1', '2', '3', '4', '5', '3-5'], String(b.oi && b.oi.sets !== undefined ? b.oi.sets : '3-5'), v => {
+        b.oi = b.oi || {};
+        b.oi.sets = v === '3-5' ? '3-5' : +v;
+      }));
     }
     rerender();
   };
