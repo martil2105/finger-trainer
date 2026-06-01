@@ -225,71 +225,27 @@
     }
 
     // pick a different workout
-    view.appendChild(el('button', { class: 'btn secondary', onclick: () => showWorkoutPicker(cycle, weeks, plan) }, ['Do a different workout →']));
+    view.appendChild(el('button', { class: 'btn secondary', onclick: () => showWorkoutPicker(cycle, weeks, wmFor, plan) }, ['Do a different workout →']));
 
     // log-without-runner quick action
     view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.openManualLog() }, ['Log a session manually']));
   }
 
-  function showWorkoutPicker(cycle, weeks, todayPlan) {
-    const ws = cycle.weeklyStructure || {};
-    const dayNames = { sun: 'Sunday', mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday' };
-    const roleLabelMap = { Heavy: 'Heavy yielding', Volume: 'Volume yielding', OIprimer: 'OI primer', Test: 'Benchmark test', Deload: 'Deload' };
-
-    const weekNum = todayPlan.week || 1;
-    const week = weeks[weekNum - 1];
-    if (!week) {
-      App.sheet("This week's workouts", [el('p', { class: 'muted' }, ['No week data available.'])]);
-      return;
-    }
+  function showWorkoutPicker(cycle, weeks, wmFor, todayPlan) {
+    const weekNum = (todayPlan && todayPlan.week) || 1;
+    // Walk the 7 days of this cycle-week and collect any non-rest plans
+    const weekStartIso = Calc.addDays(cycle.startDate, (weekNum - 1) * 7);
+    const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const roleLabelMap = { Heavy: 'Heavy yielding', Volume: 'Volume yielding', OIprimer: 'OI primer',
+                           Test: 'Benchmark test', Deload: 'Deload' };
 
     const options = [];
-    DOW.forEach(dow => {
-      const structRole = ws[dow];
-      if (!structRole || structRole === 'Rest') return;
-      let p = null;
-      if (week.isDeloadTest) {
-        if (structRole === 'Heavy') {
-          p = { rest: false, role: 'Test', week: weekNum, blockName: week.blockName,
-            duration: week.testDurations && week.testDurations[0], testDurations: week.testDurations,
-            rpe: '9–9.5', protocol: 'test', sets: week.testDurations && week.testDurations.length, anchor: null };
-        } else if (structRole === 'OIprimer') {
-          p = { rest: false, role: 'Deload', week: weekNum, blockName: week.blockName,
-            duration: 5, rpe: 6, protocol: 'deload', sets: 3, anchor: week.deloadAnchorKg };
-        }
-        // Volume slot = rest during deload weeks — skip
-      } else {
-        if (structRole === 'Heavy') {
-          p = { rest: false, role: 'Heavy', week: weekNum, blockName: week.blockName,
-            duration: week.heavyDuration, rpe: week.heavyRPE, protocol: week.heavyProtocol,
-            sets: week.heavySets, anchor: week.heavyAnchorKg, backoffAnchor: week.backoffAnchorKg };
-        } else if (structRole === 'Volume') {
-          p = { rest: false, role: 'Volume', week: weekNum, blockName: week.blockName,
-            duration: week.volumeDuration, rpe: '7–8', protocol: 'fixedVolume',
-            sets: week.volumeSets, anchor: week.volumeAnchorKg, pct: week.volumePct };
-        } else if (structRole === 'OIprimer') {
-          p = { rest: false, role: 'OIprimer', week: weekNum, blockName: week.blockName,
-            duration: null, rpe: null, protocol: 'oi', sets: week.oiSets, anchor: null,
-            note: 'Overcoming isometrics — max-intent press/pull against a fixed surface, ~5s. Neural primer, then limit board.' };
-        }
-      }
-      if (p) options.push({ dow, dayName: dayNames[dow], plan: p });
-    });
-
-    // For multi-test deload weeks (e.g. W15): add Sunday secondary test option
-    if (week.isDeloadTest && week.testDurations && week.testDurations.length > 1) {
-      const ws2 = cycle.weeklyStructure || {};
-      const heavyDow2 = Object.keys(ws2).find(d => ws2[d] === 'Heavy');
-      const heavyIdx2 = heavyDow2 ? DOW.indexOf(heavyDow2) : -1;
-      if (heavyIdx2 >= 0) {
-        const sundayDow = DOW[(heavyIdx2 + 1) % 7];
-        const secDur = week.testDurations[1];
-        options.push({ dow: sundayDow, dayName: dayNames[sundayDow] + ' (secondary)', plan: {
-          rest: false, role: 'Test', week: weekNum, blockName: week.blockName,
-          duration: secDur, testDurations: [secDur],
-          rpe: '9–9.5', protocol: 'test', sets: 1, anchor: null,
-          note: `Secondary benchmark (${secDur}s). Full rest since Saturday's ${week.testDurations[0]}s test. Anchors next cycle's Peak WM.`
-        }});
+    for (let i = 0; i < 7; i++) {
+      const dateIso = Calc.addDays(weekStartIso, i);
+      const p = App.buildPlan(cycle, weeks, dateIso, wmFor);
+      if (!p.rest) {
+        const dayName = DAY_NAMES[new Date(dateIso + 'T00:00:00').getDay()];
+        options.push({ dayName, plan: p });
       }
     }
 
@@ -737,8 +693,13 @@
     // ratings
     const taxR = rating(5, state.taxing, v => state.taxing = v);
     const feltR = rating(10, state.felt, v => state.felt = v);
+    const ndfR = rating(5, state.ndf, v => state.ndf = v);
     body.push(el('div', { class: 'field' }, [el('label', null, ['Session taxing (1–5)']), taxR]));
     body.push(el('div', { class: 'field' }, [el('label', null, ['Felt strong (1–10)']), feltR]));
+    body.push(el('div', { class: 'field' }, [
+      el('label', null, ['Next-day feel (1–5, fill tomorrow)']),
+      ndfR
+    ]));
 
     const notes = el('textarea', { placeholder: 'Notes' }); notes.value = state.notes;
     notes.addEventListener('input', () => state.notes = notes.value);
