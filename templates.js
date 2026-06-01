@@ -15,7 +15,7 @@
       weeklyStructure: { mon: 'Rest', tue: 'OIprimer', wed: 'Rest', thu: 'Volume', fri: 'Rest', sat: 'Heavy', sun: 'Rest' },
       notes: 'Skips accumulation — straight into Transmutation given established base.',
       blocks: [
-        block('Transmutation I', 'Transmutation', 4, 5, 'topSetPlusBackoffs', 8.5, 9.0, 3, 3, 0.82, 5, 0.82, 0.85, 5, 3),
+        block('Transmutation I', 'Transmutation', 4, 5, 'topSetPlusBackoffs', 8.5, 9.0, 3, 3, 0.92, 5, 0.82, 0.85, 5, 3, 0.95),
         deload('Deload + Test', [5]),
         block('Transmutation II', 'Transmutation', 4, 5, 'topSetPlusBackoffs', 9.0, 9.5, 3, 2, 0.82, 5, 0.86, 0.88, 5, 3),
         deload('Deload + Test', [5, 3]),
@@ -61,11 +61,14 @@
     };
   }
 
-  function block(name, type, weeks, hDur, protocol, rpeS, rpeE, setsS, setsE, boPct, vDur, pctS, pctE, vSets, oiSets) {
+  // boPctE (optional 16th param): if set, back-off % lerps from boPct→boPctE over the block.
+  // Omit or pass undefined to use a flat boPct throughout.
+  function block(name, type, weeks, hDur, protocol, rpeS, rpeE, setsS, setsE, boPct, vDur, pctS, pctE, vSets, oiSets, boPctE) {
     return {
       id: uid(), name, type, durationWeeks: weeks, isDeloadTest: false,
       heavy: { hangDurationSeconds: hDur, protocol, rpeStart: rpeS, rpeEnd: rpeE,
-               setsStart: setsS, setsEnd: setsE, backoffPctOfTop: boPct },
+               setsStart: setsS, setsEnd: setsE, backoffPctOfTop: boPct,
+               backoffPctOfTopEnd: boPctE != null ? boPctE : boPct },
       volume: { hangDurationSeconds: vDur, pctStart: pctS, pctEnd: pctE, sets: vSets, fixedNoExtensions: true },
       oi: { sets: oiSets },
       testConfig: null

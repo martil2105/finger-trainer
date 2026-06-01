@@ -16,9 +16,12 @@
 
   // ---- 6.1 E1RM ---------------------------------------------------------
   // Only meaningful for Yielding roles with RPE >= 6.
-  function e1rm(loadKg, rpe) {
+  // hangDuration: 3s hangs yield ~10% higher loads at the same RPE — divide by 1.1
+  // to normalise to a 5s-equivalent so the E1RM trend stays on one comparable scale.
+  function e1rm(loadKg, rpe, hangDuration) {
     if (loadKg == null || rpe == null || rpe < 6) return null;
-    return roundTo(loadKg * 100 / (40 + 6 * rpe), 1);
+    const raw = roundTo(loadKg * 100 / (40 + 6 * rpe), 1);
+    return hangDuration === 3 ? roundTo(raw / 1.1, 1) : raw;
   }
 
   // ---- 6.2 Load anchors from WM ----------------------------------------
@@ -30,9 +33,10 @@
     if (heavyAnchorKg == null) return null;
     return roundTo05(heavyAnchorKg * volumePct);
   }
-  function backoffAnchor(heavyAnchorKg) {
+  // pct: fraction of heavy anchor (per-week, lerped from block boPctStart→boPctEnd)
+  function backoffAnchor(heavyAnchorKg, pct) {
     if (heavyAnchorKg == null) return null;
-    return roundTo05(heavyAnchorKg * 0.82);
+    return roundTo05(heavyAnchorKg * (pct != null ? pct : 0.82));
   }
   function deloadAnchor(wm5) {
     if (wm5 == null) return null;
@@ -67,7 +71,10 @@
         wk.heavyProtocol = block.heavy.protocol;
         wk.heavyRPE = roundTo025(lerp(block.heavy.rpeStart, block.heavy.rpeEnd, f));
         wk.heavySets = Math.round(lerp(block.heavy.setsStart, block.heavy.setsEnd, f));
-        wk.backoffPctOfTop = block.heavy.backoffPctOfTop;
+        // back-off pct lerps from boPctStart to boPctEnd if defined; falls back to single boPct
+        const boPctS = block.heavy.backoffPctOfTop || 0.82;
+        const boPctE = block.heavy.backoffPctOfTopEnd != null ? block.heavy.backoffPctOfTopEnd : boPctS;
+        wk.backoffPctOfTop = roundTo(lerp(boPctS, boPctE, f), 3);
         wk.volumeDuration = block.volume ? block.volume.hangDurationSeconds : 5;
         wk.volumePct = block.volume
           ? Math.round(lerp(block.volume.pctStart, block.volume.pctEnd, f) * 100) / 100
@@ -103,7 +110,7 @@
     }
     const wm = wmFor(w.heavyDuration);
     w.heavyAnchorKg = heavyAnchor(wm, w.heavyRPE);
-    w.backoffAnchorKg = backoffAnchor(w.heavyAnchorKg);
+    w.backoffAnchorKg = backoffAnchor(w.heavyAnchorKg, w.backoffPctOfTop);
     if (w.volumePct != null) {
       w.volumeAnchorKg = volumeAnchor(w.heavyAnchorKg, w.volumePct);
     }

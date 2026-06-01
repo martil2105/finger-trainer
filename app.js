@@ -93,10 +93,13 @@
     // Deload / test week special handling
     if (week.isDeloadTest) {
       if (structRole === 'Heavy') {
+        const multiTest = week.testDurations && week.testDurations.length > 1;
+        const primaryNote = multiTest
+          ? `Find max load for ${week.testDurations[0]}s @9–9.5. This is the primary test (cycle report card). Come back tomorrow for the ${week.testDurations[1]}s test — full night's rest between.`
+          : 'Find max load held for the full duration @9–9.5. Update your Working Max after.';
         return { rest: false, role: 'Test', week: wk, blockName: week.blockName,
           duration: week.testDurations[0], testDurations: week.testDurations,
-          rpe: '9–9.5', protocol: 'test', sets: week.testDurations.length,
-          anchor: null, note: 'Find max load held for the full duration @9–9.5. Update your Working Max after.' };
+          rpe: '9–9.5', protocol: 'test', sets: 1, anchor: null, note: primaryNote };
       }
       // Only the OI primer slot gets the deload session — Volume (Thu) stays rest
       // so fingers are fresh for Saturday's benchmark test.
@@ -105,14 +108,31 @@
           duration: 5, rpe: 6, protocol: 'deload', sets: 3, anchor: week.deloadAnchorKg,
           note: 'Easy deload — 3 sets @6 at 75% of 5s WM. Keep it light.' };
       }
+      // Day immediately after Heavy = secondary test (if multiple durations, e.g. W15 5s Sat + 3s Sun)
+      if (structRole === 'Rest' && week.testDurations && week.testDurations.length > 1) {
+        const ws = cycle.weeklyStructure || {};
+        const heavyDow = Object.keys(ws).find(d => ws[d] === 'Heavy');
+        const heavyIdx = heavyDow ? DOW.indexOf(heavyDow) : -1;
+        const dowIdx = DOW.indexOf(dow);
+        if (heavyIdx >= 0 && (dowIdx - heavyIdx + 7) % 7 === 1) {
+          const secDur = week.testDurations[1];
+          return { rest: false, role: 'Test', week: wk, blockName: week.blockName,
+            duration: secDur, testDurations: [secDur],
+            rpe: '9–9.5', protocol: 'test', sets: 1, anchor: null,
+            note: `Secondary benchmark (${secDur}s) — full rest since yesterday's ${week.testDurations[0]}s test. Find max load @9–9.5. This result anchors next cycle's Peak WM.` };
+        }
+      }
       return { rest: true, week: wk, blockName: week.blockName, note: 'Deload/test week — rest today.' };
     }
+
+    // isLastBlockWeek: true if the next week belongs to a different block (used for Peak W14 guidance)
+    const isLastBlockWeek = !weeks[wk] || weeks[wk].blockName !== week.blockName;
 
     if (structRole === 'Heavy') {
       return { rest: false, role: 'Heavy', week: wk, blockName: week.blockName,
         duration: week.heavyDuration, rpe: week.heavyRPE, protocol: week.heavyProtocol,
         sets: week.heavySets, anchor: week.heavyAnchorKg, backoffAnchor: week.backoffAnchorKg,
-        wmMissing: week.wmMissing };
+        isLastBlockWeek, wmMissing: week.wmMissing };
     }
     if (structRole === 'Volume') {
       return { rest: false, role: 'Volume', week: wk, blockName: week.blockName,
@@ -256,6 +276,23 @@
       if (p) options.push({ dow, dayName: dayNames[dow], plan: p });
     });
 
+    // For multi-test deload weeks (e.g. W15): add Sunday secondary test option
+    if (week.isDeloadTest && week.testDurations && week.testDurations.length > 1) {
+      const ws2 = cycle.weeklyStructure || {};
+      const heavyDow2 = Object.keys(ws2).find(d => ws2[d] === 'Heavy');
+      const heavyIdx2 = heavyDow2 ? DOW.indexOf(heavyDow2) : -1;
+      if (heavyIdx2 >= 0) {
+        const sundayDow = DOW[(heavyIdx2 + 1) % 7];
+        const secDur = week.testDurations[1];
+        options.push({ dow: sundayDow, dayName: dayNames[sundayDow] + ' (secondary)', plan: {
+          rest: false, role: 'Test', week: weekNum, blockName: week.blockName,
+          duration: secDur, testDurations: [secDur],
+          rpe: '9–9.5', protocol: 'test', sets: 1, anchor: null,
+          note: `Secondary benchmark (${secDur}s). Full rest since Saturday's ${week.testDurations[0]}s test. Anchors next cycle's Peak WM.`
+        }});
+      }
+    }
+
     if (!options.length) {
       App.sheet("This week's workouts", [el('p', { class: 'muted' }, ['No sessions scheduled this week.'])]);
       return;
@@ -307,8 +344,19 @@
       c.appendChild(el('div', { class: 'banner danger' }, [`No ${plan.duration}s Working Max on file — set a benchmark for a correct anchor.`]));
     }
 
-    // RPE-leads callout
-    if (plan.role === 'Heavy' || plan.role === 'Test') {
+    // RPE-leads callout / autoregulation guidance
+    if (plan.protocol === 'maxSingles' && plan.role === 'Heavy') {
+      // Peak block: 3s max singles — specific autoregulation rules from program
+      c.appendChild(el('div', { class: 'callout' }, [
+        'Load off warmup feel: @7 → +2.5–5 kg from last session · @8 → match or +1–2.5 kg · @8.5+ → hold or back off.'
+      ]));
+      const rpeNote = plan.isLastBlockWeek
+        ? '@9.5 ceiling. Final Peak week — one @10 single permitted on your last effort if all prior singles felt clean.'
+        : 'RPE ceiling @9.5 — do not exceed.';
+      c.appendChild(el('p', { class: 'muted' }, [
+        `3–5 quality singles only. 4–5 min full rest between efforts. ${rpeNote} Fatigue stop: load must drop >5% to maintain @9, grip breaks before second 2s, or any joint discomfort.`
+      ]));
+    } else if (plan.role === 'Heavy' || plan.role === 'Test') {
       c.appendChild(el('div', { class: 'callout' }, [
         `Find today's @${plan.rpe}. This kg is a reference, not a target — RPE leads.`
       ]));
@@ -681,8 +729,8 @@
     const e1rmLine = el('p', { class: 'muted' }, ['']);
     body.push(e1rmLine);
     function updE1RM() {
-      const v = state.type === 'Yielding' ? Calc.e1rm(loadSt.getValue(), rpeSt.getValue()) : null;
-      e1rmLine.textContent = v != null ? `E1RM: ${v} kg` : '';
+      const v = state.type === 'Yielding' ? Calc.e1rm(loadSt.getValue(), rpeSt.getValue(), state.hangDurationSeconds) : null;
+      e1rmLine.textContent = v != null ? `E1RM: ${v} kg (5s-eq)` : '';
     }
     updE1RM();
 
@@ -827,7 +875,7 @@
       const load = num(c[idx.loadKg]);
       const rpe = num(c[idx.rpe]);
       let e1 = num(c[idx.e1rmKg]);
-      if (e1 == null && type === 'Yielding') e1 = Calc.e1rm(load, rpe);
+      if (e1 == null && type === 'Yielding') e1 = Calc.e1rm(load, rpe, dur);
       // match an existing entry on date (+ role if it disambiguates same-day sessions)
       const sameDay = byDate[date] || [];
       let match = sameDay.find(e => (e.role || '') === role) || (sameDay.length === 1 ? sameDay[0] : null);

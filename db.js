@@ -82,9 +82,9 @@
 
   function addLog(entry) {
     if (!entry.id) entry.id = Templates.uid();
-    // recompute E1RM for Yielding roles
+    // recompute E1RM for Yielding roles (3s hangs normalised ÷1.1 to 5s-equivalent)
     const yielding = entry.type === 'Yielding';
-    entry.e1rmKg = yielding ? Calc.e1rm(entry.topSetLoadKg, entry.topSetRPE) : null;
+    entry.e1rmKg = yielding ? Calc.e1rm(entry.topSetLoadKg, entry.topSetRPE, entry.hangDurationSeconds) : null;
     return put('logEntries', entry).then(() => entry);
   }
 
@@ -103,7 +103,7 @@
       Templates.SEED_LOG.forEach(e => {
         const entry = Object.assign({}, e);
         entry.e1rmKg = entry.type === 'Yielding'
-          ? Calc.e1rm(entry.topSetLoadKg, entry.topSetRPE) : null;
+          ? Calc.e1rm(entry.topSetLoadKg, entry.topSetRPE, entry.hangDurationSeconds) : null;
         ops.push(put('logEntries', entry));
       });
       return Promise.all(ops).then(() => setMeta('seeded', true)).then(() => true);
