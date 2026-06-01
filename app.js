@@ -28,7 +28,14 @@
   window.App = App;
 
   // ---- modal / sheet system --------------------------------------------
-  App.closeSheet = function () { $('#modal-host').innerHTML = ''; };
+  App.closeSheet = function () {
+    const overlay = $('#modal-host .sheet-overlay');
+    if (overlay) {
+      overlay.remove();
+    } else {
+      $('#modal-host').innerHTML = '';
+    }
+  };
   App.sheet = function (title, contentNodes, onClose) {
     const host = $('#modal-host');
     const overlay = el('div', { class: 'sheet-overlay', onclick: (e) => { if (e.target === overlay) { App.closeSheet(); onClose && onClose(); } } });
@@ -395,22 +402,78 @@
     const body = [];
     body.push(el('p', { class: 'sub' }, [`${w.blockName} · ${fmtDate(w.startDate)}`]));
     if (w.isDeloadTest) {
-      body.push(el('div', { class: 'card tight' }, [
-        el('strong', null, ['Deload + Test']),
-        el('p', { class: 'muted' }, [`Tue: 3 sets @6 deload (~${kg(w.deloadAnchorKg)}). Sat: test max @9–9.5 at ${w.testDurations.join(' & ')}s, then update Working Max.`])
+      // Deload hangs (Tue)
+      const deloadPlan = {
+        rest: false, role: 'Deload', week: w.weekNumber, blockName: w.blockName,
+        duration: 5, rpe: 6, protocol: 'deload', sets: 3, anchor: w.deloadAnchorKg,
+        note: 'Easy deload — 3 sets @6 at 75% of 5s WM. Keep it light.'
+      };
+      body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(deloadPlan); } }, [
+        el('div', { class: 'row' }, [
+          el('strong', null, ['Deload Hangs (Tue)']),
+          el('span', { class: 'pill accent' }, ['Start →'])
+        ]),
+        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`5s · 3 sets @6 · anchor ~${kg(w.deloadAnchorKg)} · Easy deload hangs`])
+      ]));
+
+      // Benchmark test (Sat)
+      const testPlan = {
+        rest: false, role: 'Test', week: w.weekNumber, blockName: w.blockName,
+        duration: w.testDurations[0], testDurations: w.testDurations,
+        rpe: '9–9.5', protocol: 'test', sets: 1, anchor: null,
+        note: w.testDurations.length > 1
+          ? `Find max load for ${w.testDurations[0]}s @9–9.5. This is the primary test. Come back tomorrow for the ${w.testDurations[1]}s test.`
+          : 'Find max load held for the full duration @9–9.5. Update your Working Max after.'
+      };
+      body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(testPlan); } }, [
+        el('div', { class: 'row' }, [
+          el('strong', null, ['Benchmark Test (Sat)']),
+          el('span', { class: 'pill accent' }, ['Start →'])
+        ]),
+        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.testDurations.join('/')}s max hangs @9–9.5 · Find today's absolute max load`])
       ]));
     } else {
-      body.push(el('div', { class: 'card tight' }, [
-        el('strong', null, ['Heavy (Sat)']),
-        el('p', { class: 'muted' }, [`${w.heavyDuration}s · @${w.heavyRPE} · anchor ~${kg(w.heavyAnchorKg)} · ${w.heavyProtocol === 'maxSingles' ? w.heavySets + ' max singles, no back-offs' : w.heavySets + ' back-offs ~' + kg(w.backoffAnchorKg)}`])
+      // Heavy hangs (Sat)
+      const heavyPlan = {
+        rest: false, role: 'Heavy', week: w.weekNumber, blockName: w.blockName,
+        duration: w.heavyDuration, rpe: w.heavyRPE, protocol: w.heavyProtocol,
+        sets: w.heavySets, anchor: w.heavyAnchorKg, backoffAnchor: w.backoffAnchorKg,
+        isLastBlockWeek: false, wmMissing: w.wmMissing
+      };
+      body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(heavyPlan); } }, [
+        el('div', { class: 'row' }, [
+          el('strong', null, ['Heavy Hangs (Sat)']),
+          el('span', { class: 'pill accent' }, ['Start →'])
+        ]),
+        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.heavyDuration}s · @${w.heavyRPE} · anchor ~${kg(w.heavyAnchorKg)} · ${w.heavyProtocol === 'maxSingles' ? w.heavySets + ' max singles' : w.heavySets + ' back-offs ~' + kg(w.backoffAnchorKg)}`])
       ]));
-      body.push(el('div', { class: 'card tight' }, [
-        el('strong', null, ['Volume (Thu)']),
-        el('p', { class: 'muted' }, [`${w.volumeDuration}s · ${Math.round((w.volumePct || 0) * 100)}% of heavy · anchor ~${kg(w.volumeAnchorKg)} · ${w.volumeSets} sets (fixed)`])
+
+      // Volume hangs (Thu)
+      const volumePlan = {
+        rest: false, role: 'Volume', week: w.weekNumber, blockName: w.blockName,
+        duration: w.volumeDuration, rpe: '7–8', protocol: 'fixedVolume',
+        sets: w.volumeSets, anchor: w.volumeAnchorKg, pct: w.volumePct
+      };
+      body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(volumePlan); } }, [
+        el('div', { class: 'row' }, [
+          el('strong', null, ['Volume Hangs (Thu)']),
+          el('span', { class: 'pill accent' }, ['Start →'])
+        ]),
+        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.volumeDuration}s · ${Math.round((w.volumePct || 0) * 100)}% of heavy · anchor ~${kg(w.volumeAnchorKg)} · ${w.volumeSets} sets`])
       ]));
-      body.push(el('div', { class: 'card tight' }, [
-        el('strong', null, ['OI primer (Tue)']),
-        el('p', { class: 'muted' }, [`${w.oiSets} sets max-intent isometrics + limit board.`])
+
+      // OI primer (Tue)
+      const oiPlan = {
+        rest: false, role: 'OIprimer', week: w.weekNumber, blockName: w.blockName,
+        duration: null, rpe: null, protocol: 'oi', sets: w.oiSets, anchor: null,
+        note: 'Overcoming isometrics — max-intent press/pull against a fixed surface, ~5s. Neural primer, then limit board.'
+      };
+      body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(oiPlan); } }, [
+        el('div', { class: 'row' }, [
+          el('strong', null, ['OI primer + Board (Tue)']),
+          el('span', { class: 'pill accent' }, ['Start →'])
+        ]),
+        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.oiSets} sets overcoming isometrics + limit board bouldering`])
       ]));
     }
     App.sheet(`Week ${w.weekNumber}`, body);

@@ -68,7 +68,7 @@
       hangSeconds: plan.duration || 5,
       sets: [], // logged efforts {load,rpe}
       curLoad: plan.anchor != null ? plan.anchor : (plan.role === 'OIprimer' ? null : 25),
-      curRPE: typeof plan.rpe === 'number' ? plan.rpe : 9,
+      curRPE: typeof plan.rpe === 'number' ? plan.rpe : (plan.rpe ? Calc.parseRPE(plan.rpe) : 9),
       timeLeft: 0, stopped: false
     };
     renderRunner();
@@ -92,7 +92,7 @@
     wrap.className = 'runner ' + (cls || '');
     wrap.innerHTML =
       `<div class="r-head"><span>${R.plan.blockName || ''} · ${R.plan.role}</span>` +
-      `<button id="r-quit" style="background:none;border:none;color:#9a9aa8;font-size:15px">Quit</button></div>` +
+      `<button id="r-quit">Quit</button></div>` +
       `<div class="r-body">${inner.body}</div>` +
       `<div class="r-foot">${inner.foot}</div>`;
     host().innerHTML = '';

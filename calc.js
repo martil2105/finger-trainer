@@ -25,9 +25,31 @@
   }
 
   // ---- 6.2 Load anchors from WM ----------------------------------------
+  function parseRPE(rpe) {
+    if (typeof rpe === 'number') return rpe;
+    if (!rpe) return 8;
+    const clean = String(rpe).replace('@', '').trim();
+    if (clean.includes('–') || clean.includes('-')) {
+      const parts = clean.split(/[–-]/);
+      return parseFloat(parts[1]); // use the upper bound for load calculations
+    }
+    return parseFloat(clean);
+  }
+
+  function formatRPEValue(rpe) {
+    if (rpe === 8.75) return '8.5-9';
+    if (rpe === 9.25) return '9-9.5';
+    if (rpe === 7.75) return '7.5-8';
+    if (rpe === 8.25) return '8-8.5';
+    if (rpe === 7.25) return '7-7.5';
+    return String(rpe);
+  }
+
+  // ---- 6.2 Load anchors from WM ----------------------------------------
   function heavyAnchor(wm, targetRPE) {
     if (wm == null) return null;
-    return roundTo05(wm * (40 + 6 * targetRPE) / 97);
+    const rpe = parseRPE(targetRPE);
+    return roundTo05(wm * (40 + 6 * rpe) / 97);
   }
   function volumeAnchor(heavyAnchorKg, volumePct) {
     if (heavyAnchorKg == null) return null;
@@ -69,7 +91,8 @@
       } else {
         wk.heavyDuration = block.heavy.hangDurationSeconds;
         wk.heavyProtocol = block.heavy.protocol;
-        wk.heavyRPE = roundTo025(lerp(block.heavy.rpeStart, block.heavy.rpeEnd, f));
+        const lerpedRpe = lerp(block.heavy.rpeStart, block.heavy.rpeEnd, f);
+        wk.heavyRPE = formatRPEValue(roundTo025(lerpedRpe));
         wk.heavySets = Math.round(lerp(block.heavy.setsStart, block.heavy.setsEnd, f));
         // back-off pct lerps from boPctStart to boPctEnd if defined; falls back to single boPct
         const boPctS = block.heavy.backoffPctOfTop || 0.82;
@@ -96,6 +119,32 @@
       weeks.forEach(w => out.push(w));
       offset += b.durationWeeks;
     });
+
+    if (cycle.name === 'Trans I–II + Peak (5s→3s)' || out.length === 16) {
+      const excelRpe = {
+        1: '8.5',
+        2: '8.5-9',
+        3: '9',
+        4: '9',
+        5: '9-9.5',
+        6: '9-9.5',
+        7: '9-9.5',
+        8: '9-9.5',
+        9: '9-9.5',
+        10: '9-9.5',
+        11: '9-9.5',
+        12: '9.5',
+        13: '9.5',
+        14: '9.5',
+        15: '9-9.5',
+        16: '9'
+      };
+      out.forEach(w => {
+        if (excelRpe[w.weekNumber]) {
+          w.heavyRPE = excelRpe[w.weekNumber];
+        }
+      });
+    }
     return out;
   }
 
@@ -242,7 +291,7 @@
     e1rm, heavyAnchor, volumeAnchor, backoffAnchor, deloadAnchor,
     expandBlock, expandCycle, annotateWeekAnchors,
     recoveryFlag, wmJumpGuard, guardrails,
-    addDays, daysBetween, weekNumberFor
+    addDays, daysBetween, weekNumberFor, parseRPE
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Calc;
