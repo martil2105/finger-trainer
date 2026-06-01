@@ -118,7 +118,7 @@ table.prev th { color: var(--text-dim); font-weight: 600; }
 
 /* modal / sheet */
 #modal-host:empty { display: none; }
-.sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100;
+.sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 300;
                  display: flex; align-items: flex-end; }
 .sheet {
   position: relative;

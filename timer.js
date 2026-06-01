@@ -39,7 +39,14 @@
   }
 
   async function acquireWakeLock() {
-    try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLock = await Promise.race([
+          navigator.wakeLock.request('screen'),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 1000))
+        ]);
+      }
+    } catch (e) {}
   }
   function releaseWakeLock() { try { if (wakeLock) { wakeLock.release(); wakeLock = null; } } catch (e) {} }
   document.addEventListener('visibilitychange', async () => {
@@ -50,28 +57,32 @@
   let R = null; // current session state
 
   Runner.start = async function (plan) {
-    unlockAudio();
-    await acquireWakeLock();
-    const restDefault = plan.protocol === 'maxSingles'
-      ? (await DB.getMeta('restPeak') || 270)
-      : (await DB.getMeta('restBackoff') || 180);
+    if (R) return;
+    try {
+      unlockAudio();
+      await acquireWakeLock();
+      const restDefault = plan.protocol === 'maxSingles'
+        ? (await DB.getMeta('restPeak') || 270)
+        : (await DB.getMeta('restBackoff') || 180);
 
-    // For Heavy topSetPlusBackoffs: total efforts = 1 top set + N back-offs.
-    // For maxSingles: N singles. For fixedVolume: N sets (hard cap). Deload: 3 sets. Test: per duration.
-    let totalEfforts, label;
-    if (plan.protocol === 'topSetPlusBackoffs') { totalEfforts = 1 + (plan.sets || 0); }
-    else if (plan.protocol === 'test') { totalEfforts = (plan.testDurations || [plan.duration]).length; }
-    else { totalEfforts = plan.sets || 1; }
+      let totalEfforts;
+      if (plan.protocol === 'topSetPlusBackoffs') { totalEfforts = 1 + (plan.sets || 0); }
+      else if (plan.protocol === 'test') { totalEfforts = (plan.testDurations || [plan.duration]).length; }
+      else { totalEfforts = plan.sets || 1; }
 
-    R = {
-      plan, restDefault, phase: 'PREP', effort: 0, totalEfforts,
-      hangSeconds: plan.duration || 5,
-      sets: [], // logged efforts {load,rpe}
-      curLoad: plan.anchor != null ? plan.anchor : (plan.role === 'OIprimer' ? null : 25),
-      curRPE: typeof plan.rpe === 'number' ? plan.rpe : (plan.rpe ? Calc.parseRPE(plan.rpe) : 9),
-      timeLeft: 0, stopped: false
-    };
-    renderRunner();
+      R = {
+        plan, restDefault, phase: 'PREP', effort: 0, totalEfforts,
+        hangSeconds: plan.duration || 5,
+        sets: [], // logged efforts {load,rpe}
+        curLoad: plan.anchor != null ? plan.anchor : (plan.role === 'OIprimer' ? null : 25),
+        curRPE: typeof plan.rpe === 'number' ? plan.rpe : (plan.rpe ? Calc.parseRPE(plan.rpe) : 9),
+        timeLeft: 0, stopped: false
+      };
+      renderRunner();
+    } catch (err) {
+      alert('Error starting session: ' + err.message);
+      R = null;
+    }
   };
 
   function host() { return document.getElementById('modal-host'); }

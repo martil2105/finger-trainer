@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    #modal-host { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; background: #222; overflow-y: auto; }
+    #modal-host:empty { display: none; }
+  </style>
+</head>
+<body>
+  <div id="modal-host"></div>
+  <script src="db.js"></script>
+  <script src="calc.js"></script>
+  <script src="timer.js"></script>
+  <script src="app.js"></script>
+  <script>
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      console.log('ERROR:', msg);
+      document.body.innerHTML += '<div style="color:red">ERROR: ' + msg + '</div>';
+    };
+    setTimeout(() => {
+      try {
+        Runner.start({
+          rest: false, role: 'Heavy', week: 4, blockName: 'Strength',
+          duration: 5, rpe: '9-9.5', protocol: 'topSetPlusBackoffs',
+          sets: 3, anchor: 25, backoffAnchor: 20
+        });
+      } catch (e) {
+        document.body.innerHTML += '<div style="color:red">ERROR starting: ' + e + '</div>';
+      }
+    }, 1000);
+  </script>
+</body>
+</html>
