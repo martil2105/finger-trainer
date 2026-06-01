@@ -202,8 +202,53 @@
       view.appendChild(sessionCard(plan));
     }
 
+    // pick a different workout
+    view.appendChild(el('button', { class: 'btn secondary', onclick: () => showWorkoutPicker(cycle, weeks, wmFor) }, ['Do a different workout →']));
+
     // log-without-runner quick action
     view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.openManualLog() }, ['Log a session manually']));
+  }
+
+  function showWorkoutPicker(cycle, weeks, wmFor) {
+    const ws = cycle.weeklyStructure || {};
+    const dayNames = { sun: 'Sunday', mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday' };
+    const roleLabel = { Heavy: 'Heavy yielding', Volume: 'Volume yielding', OIprimer: 'OI primer', Test: 'Benchmark test', Deload: 'Deload' };
+
+    // Find this week's date for each day (Sun-based week matching JS getDay())
+    const today = new Date(todayISO() + 'T00:00:00');
+    const options = [];
+    DOW.forEach((dow, idx) => {
+      const structRole = ws[dow];
+      if (!structRole || structRole === 'Rest') return;
+      const d = new Date(today);
+      d.setDate(today.getDate() - today.getDay() + idx);
+      const dateIso = d.toISOString().slice(0, 10);
+      const plan = App.buildPlan(cycle, weeks, dateIso, wmFor);
+      if (!plan.rest) options.push({ dow, dayName: dayNames[dow], plan });
+    });
+
+    if (!options.length) {
+      App.sheet("This week's workouts", [el('p', { class: 'muted' }, ['No sessions scheduled this week.'])]);
+      return;
+    }
+
+    const body = options.map(({ dayName, plan }) => {
+      const label = roleLabel[plan.role] || plan.role;
+      const btn = el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(plan); } });
+      btn.appendChild(el('div', { class: 'row' }, [
+        el('strong', null, [dayName]),
+        el('span', { class: 'pill accent' }, [label])
+      ]));
+      const bits = [];
+      if (plan.duration) bits.push(plan.duration + 's');
+      if (plan.rpe) bits.push('@' + plan.rpe);
+      if (plan.sets) bits.push(plan.sets + ' sets');
+      if (plan.anchor != null) bits.push('~' + plan.anchor + ' kg');
+      if (bits.length) btn.appendChild(el('p', { class: 'muted', style: 'margin:4px 0 0' }, [bits.join(' · ')]));
+      return btn;
+    });
+
+    App.sheet("This week's workouts", body);
   }
 
   function sessionCard(plan) {
@@ -531,6 +576,8 @@
       view.appendChild(c3);
     }
 
+    view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.importBundledHistory() }, ['Load my spreadsheet history (19 sessions)']));
+    view.appendChild(el('div', { class: 'spacer' }));
     view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.exportCSV() }, ['Export CSV']));
     view.appendChild(el('div', { class: 'spacer' }));
     view.appendChild(el('button', { class: 'btn danger', onclick: () => App.resetData() }, ['Reset all data']));
@@ -697,6 +744,17 @@
     document.body.appendChild(a); a.click(); a.remove();
   };
   function csvq(s) { return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+
+  // One-tap import of the bundled spreadsheet history (history_import.csv).
+  App.importBundledHistory = async function () {
+    try {
+      const res = await fetch('history_import.csv', { cache: 'no-store' });
+      if (!res.ok) throw new Error('not found');
+      await doImport(await res.text());
+    } catch (e) {
+      App.confirm('Could not find the bundled history file. Use "Import CSV" on the History tab to pick it manually.', 'OK');
+    }
+  };
 
   App.importCSV = function () {
     const input = el('input', { type: 'file', accept: '.csv,text/csv' });
