@@ -98,12 +98,14 @@
           rpe: '9–9.5', protocol: 'test', sets: week.testDurations.length,
           anchor: null, note: 'Find max load held for the full duration @9–9.5. Update your Working Max after.' };
       }
-      if (structRole === 'OIprimer' || structRole === 'Volume') {
+      // Only the OI primer slot gets the deload session — Volume (Thu) stays rest
+      // so fingers are fresh for Saturday's benchmark test.
+      if (structRole === 'OIprimer') {
         return { rest: false, role: 'Deload', week: wk, blockName: week.blockName,
           duration: 5, rpe: 6, protocol: 'deload', sets: 3, anchor: week.deloadAnchorKg,
           note: 'Easy deload — 3 sets @6 at 75% of 5s WM. Keep it light.' };
       }
-      return { rest: true, week: wk, blockName: week.blockName, note: 'Deload/test week — rest.' };
+      return { rest: true, week: wk, blockName: week.blockName, note: 'Deload/test week — rest today.' };
     }
 
     if (structRole === 'Heavy') {
@@ -203,28 +205,55 @@
     }
 
     // pick a different workout
-    view.appendChild(el('button', { class: 'btn secondary', onclick: () => showWorkoutPicker(cycle, weeks, wmFor) }, ['Do a different workout →']));
+    view.appendChild(el('button', { class: 'btn secondary', onclick: () => showWorkoutPicker(cycle, weeks, plan) }, ['Do a different workout →']));
 
     // log-without-runner quick action
     view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.openManualLog() }, ['Log a session manually']));
   }
 
-  function showWorkoutPicker(cycle, weeks, wmFor) {
+  function showWorkoutPicker(cycle, weeks, todayPlan) {
     const ws = cycle.weeklyStructure || {};
     const dayNames = { sun: 'Sunday', mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday' };
-    const roleLabel = { Heavy: 'Heavy yielding', Volume: 'Volume yielding', OIprimer: 'OI primer', Test: 'Benchmark test', Deload: 'Deload' };
+    const roleLabelMap = { Heavy: 'Heavy yielding', Volume: 'Volume yielding', OIprimer: 'OI primer', Test: 'Benchmark test', Deload: 'Deload' };
 
-    // Find this week's date for each day (Sun-based week matching JS getDay())
-    const today = new Date(todayISO() + 'T00:00:00');
+    const weekNum = todayPlan.week || 1;
+    const week = weeks[weekNum - 1];
+    if (!week) {
+      App.sheet("This week's workouts", [el('p', { class: 'muted' }, ['No week data available.'])]);
+      return;
+    }
+
     const options = [];
-    DOW.forEach((dow, idx) => {
+    DOW.forEach(dow => {
       const structRole = ws[dow];
       if (!structRole || structRole === 'Rest') return;
-      const d = new Date(today);
-      d.setDate(today.getDate() - today.getDay() + idx);
-      const dateIso = d.toISOString().slice(0, 10);
-      const plan = App.buildPlan(cycle, weeks, dateIso, wmFor);
-      if (!plan.rest) options.push({ dow, dayName: dayNames[dow], plan });
+      let p = null;
+      if (week.isDeloadTest) {
+        if (structRole === 'Heavy') {
+          p = { rest: false, role: 'Test', week: weekNum, blockName: week.blockName,
+            duration: week.testDurations && week.testDurations[0], testDurations: week.testDurations,
+            rpe: '9–9.5', protocol: 'test', sets: week.testDurations && week.testDurations.length, anchor: null };
+        } else if (structRole === 'OIprimer') {
+          p = { rest: false, role: 'Deload', week: weekNum, blockName: week.blockName,
+            duration: 5, rpe: 6, protocol: 'deload', sets: 3, anchor: week.deloadAnchorKg };
+        }
+        // Volume slot = rest during deload weeks — skip
+      } else {
+        if (structRole === 'Heavy') {
+          p = { rest: false, role: 'Heavy', week: weekNum, blockName: week.blockName,
+            duration: week.heavyDuration, rpe: week.heavyRPE, protocol: week.heavyProtocol,
+            sets: week.heavySets, anchor: week.heavyAnchorKg, backoffAnchor: week.backoffAnchorKg };
+        } else if (structRole === 'Volume') {
+          p = { rest: false, role: 'Volume', week: weekNum, blockName: week.blockName,
+            duration: week.volumeDuration, rpe: '7–8', protocol: 'fixedVolume',
+            sets: week.volumeSets, anchor: week.volumeAnchorKg, pct: week.volumePct };
+        } else if (structRole === 'OIprimer') {
+          p = { rest: false, role: 'OIprimer', week: weekNum, blockName: week.blockName,
+            duration: null, rpe: null, protocol: 'oi', sets: week.oiSets, anchor: null,
+            note: 'Overcoming isometrics — max-intent press/pull against a fixed surface, ~5s. Neural primer, then limit board.' };
+        }
+      }
+      if (p) options.push({ dow, dayName: dayNames[dow], plan: p });
     });
 
     if (!options.length) {
@@ -233,7 +262,7 @@
     }
 
     const body = options.map(({ dayName, plan }) => {
-      const label = roleLabel[plan.role] || plan.role;
+      const label = roleLabelMap[plan.role] || plan.role;
       const btn = el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(plan); } });
       btn.appendChild(el('div', { class: 'row' }, [
         el('strong', null, [dayName]),
