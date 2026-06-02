@@ -1239,6 +1239,7 @@
   };
 
   // ---- boot -------------------------------------------------------------
+  document.body.addEventListener('touchstart', () => {}, { passive: true });
   document.querySelectorAll('#tabbar .tab').forEach(t =>
     t.addEventListener('click', () => App.go(t.dataset.tab)));
 
