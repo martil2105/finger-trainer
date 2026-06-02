@@ -865,6 +865,84 @@
       c3.appendChild(el('p', { class: 'muted' }, ['Units: kg']));
       view.appendChild(c3);
     }
+    
+    // GitHub Gist Sync Card
+    const token = await DB.getMeta('githubToken');
+    const gistId = await DB.getMeta('githubGistId');
+    const cSync = el('div', { class: 'card' });
+    cSync.appendChild(el('h2', { style: 'margin-top:0' }, ['GitHub Gist Sync']));
+
+    if (token) {
+      cSync.appendChild(el('p', { class: 'muted', style: 'margin-bottom:8px' }, [
+        `Status: Connected `,
+        el('span', { style: 'color:var(--success);font-weight:700' }, ['●'])
+      ]));
+      if (gistId) {
+        cSync.appendChild(el('p', { class: 'muted', style: 'margin-bottom:12px' }, [`Gist ID: ${gistId}`]));
+      } else {
+        cSync.appendChild(el('p', { class: 'muted', style: 'margin-bottom:12px' }, ['No Gist linked yet. It will be created on the first sync.']));
+      }
+
+      const statusText = el('p', { class: 'muted', style: 'margin:8px 0;font-style:italic' }, ['']);
+      const syncBtn = el('button', { class: 'btn small', onclick: async () => {
+        syncBtn.disabled = true;
+        statusText.style.color = 'var(--text-dim)';
+        const res = await Sync.run(msg => statusText.textContent = msg);
+        syncBtn.disabled = false;
+        if (res.success) {
+          statusText.style.color = 'var(--success)';
+          setTimeout(() => App.render(), 1500);
+        } else {
+          statusText.style.color = 'var(--danger)';
+        }
+      } }, ['Sync Now']);
+
+      const discBtn = el('button', { class: 'btn small secondary', style: 'margin-left:8px', onclick: async () => {
+        App.confirm('Disconnect from GitHub Sync? Your token and Gist ID will be cleared locally.', 'Disconnect', async () => {
+          await Sync.disconnect();
+          App.render();
+        });
+      } }, ['Disconnect']);
+
+      cSync.appendChild(el('div', { class: 'row', style: 'justify-content:flex-start' }, [syncBtn, discBtn]));
+      cSync.appendChild(statusText);
+    } else {
+      cSync.appendChild(el('p', { class: 'muted', style: 'margin-bottom:12px;line-height:1.4' }, [
+        'Backup and sync your logs across devices. Create a private ',
+        el('a', { href: 'https://github.com/settings/tokens/new?scopes=gist&description=Finger%20Trainer%20Sync', target: '_blank', style: 'color:var(--accent);text-decoration:none' }, ['GitHub Personal Access Token']),
+        ' with the gist scope, then paste it below:'
+      ]));
+
+      const tokInput = el('input', { type: 'password', placeholder: 'ghp_xxxxxxxxxxxx', style: 'width:100%;margin-bottom:12px;background:rgba(255,255,255,0.06);border:1px solid var(--card-border);color:var(--text);border-radius:10px;padding:11px 12px;font-size:16px' });
+      const statusText = el('p', { class: 'muted', style: 'margin:8px 0;font-style:italic' }, ['']);
+      const connectBtn = el('button', { class: 'btn small', onclick: async () => {
+        const val = tokInput.value.trim();
+        if (!val) {
+          statusText.style.color = 'var(--danger)';
+          statusText.textContent = 'Please enter a token first.';
+          return;
+        }
+        connectBtn.disabled = true;
+        statusText.style.color = 'var(--text-dim)';
+        statusText.textContent = 'Saving token and performing initial sync...';
+        await Sync.saveToken(val);
+        const res = await Sync.run(msg => statusText.textContent = msg);
+        connectBtn.disabled = false;
+        if (res.success) {
+          statusText.style.color = 'var(--success)';
+          setTimeout(() => App.render(), 1500);
+        } else {
+          statusText.style.color = 'var(--danger)';
+          await Sync.disconnect();
+        }
+      } }, ['Connect & Sync']);
+
+      cSync.appendChild(el('div', { class: 'field', style: 'margin:0' }, [tokInput]));
+      cSync.appendChild(el('div', { style: 'margin-top:12px' }, [connectBtn]));
+      cSync.appendChild(statusText);
+    }
+
+    view.appendChild(cSync);
 
     view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.importBundledHistory() }, ['Load my spreadsheet history (19 sessions)']));
     view.appendChild(el('div', { class: 'spacer' }));

@@ -110,6 +110,40 @@
     });
   }
 
+  function exportBackup() {
+    return Promise.all([
+      getAll('logEntries'),
+      getAll('workingMaxes'),
+      getAll('cycles'),
+      getAll('meta')
+    ]).then(([logs, wms, cycles, meta]) => {
+      const cleanMeta = meta.filter(m => m.key !== 'githubToken' && m.key !== 'githubGistId');
+      return { logEntries: logs, workingMaxes: wms, cycles, meta: cleanMeta };
+    });
+  }
+
+  function importBackup(data) {
+    if (!data) return Promise.resolve();
+    const ops = [];
+    if (data.logEntries) {
+      data.logEntries.forEach(x => ops.push(put('logEntries', x)));
+    }
+    if (data.workingMaxes) {
+      data.workingMaxes.forEach(x => ops.push(put('workingMaxes', x)));
+    }
+    if (data.cycles) {
+      data.cycles.forEach(x => ops.push(put('cycles', x)));
+    }
+    if (data.meta) {
+      data.meta.forEach(x => {
+        if (x.key !== 'githubToken' && x.key !== 'githubGistId') {
+          ops.push(put('meta', x));
+        }
+      });
+    }
+    return Promise.all(ops);
+  }
+
   function resetAll() {
     return Promise.all([
       clear('workingMaxes'), clear('cycles'), clear('logEntries'),
@@ -120,6 +154,6 @@
   root.DB = {
     open, put, del, getAll, get, clear, getMeta, setMeta,
     currentWM, wmDurationsOnFile, activeCycle, logsNewestFirst, addLog,
-    seedIfEmpty, resetAll
+    seedIfEmpty, resetAll, exportBackup, importBackup
   };
 })(typeof self !== 'undefined' ? self : this);
