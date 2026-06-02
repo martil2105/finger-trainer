@@ -489,19 +489,32 @@
     const logs = (await DB.logsNewestFirst()).slice().reverse(); // oldest -> newest
     const yielding = logs.filter(l => l.type === 'Yielding' && l.e1rmKg != null);
 
+    // ---- summary stat cards ----
+    const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: l.e1rmKg }));
+    const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: l.e1rmKg }));
+    view.appendChild(statGrid([
+      summarizeSeries('5s E1RM', s5all, '#4f8ef7'),
+      summarizeSeries('3s E1RM', s3all, '#ff6b6b'),
+      { label: 'Sessions', value: String(logs.length), sub: 'logged' },
+      { label: 'Yielding', value: String(yielding.length), sub: 'with E1RM' }
+    ]));
+
     // E1RM chart, two series by duration
     view.appendChild(el('h2', null, ['E1RM trend']));
-    const s5 = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: l.e1rmKg }));
-    const s3 = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: l.e1rmKg }));
+    const s5 = s5all, s3 = s3all;
     if (!s5.length && !s3.length) {
       view.appendChild(el('div', { class: 'card' }, ['Log Yielding sessions with load + RPE to see E1RM trends.']));
     } else {
       const card = el('div', { class: 'card' });
       card.appendChild(el('div', { class: 'legend' }, [
         el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s E1RM']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s E1RM'])
+        el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s E1RM']),
+        el('span', null, [el('span', { class: 'sw', style: 'background:#9a9aa8' }), '3-pt avg'])
       ]));
-      card.appendChild(lineChart([{ pts: s5, color: '#4f8ef7' }, { pts: s3, color: '#ff6b6b' }], 'kg'));
+      card.appendChild(lineChart([
+        { pts: s5, color: '#4f8ef7', name: '5s' },
+        { pts: s3, color: '#ff6b6b', name: '3s' }
+      ], 'kg', { movingAvg: true, prMarkers: true }));
       view.appendChild(card);
     }
 
@@ -513,7 +526,7 @@
       const wk = isoWeekKey(l.date);
       byWeek[wk] = (byWeek[wk] || 0) + l.topSetLoadKg * l.sets;
     });
-    const bars = Object.keys(byWeek).sort().map(k => ({ label: k.slice(5), value: Math.round(byWeek[k]) }));
+    const bars = Object.keys(byWeek).sort().map(k => ({ label: k.slice(5), value: Math.round(byWeek[k]), full: k }));
     view.appendChild(bars.length ? el('div', { class: 'card' }, [barChart(bars, 'kg·sets')])
       : el('div', { class: 'card' }, ['No volume data yet.']));
 
@@ -522,6 +535,22 @@
     const ndf = logs.filter(l => l.nextDayFeel != null).slice(-20).map(l => ({ x: l.date, y: l.nextDayFeel }));
     view.appendChild(ndf.length ? el('div', { class: 'card' }, [recoveryChart(ndf)])
       : el('div', { class: 'card' }, ['No next-day-feel data yet.']));
+
+    // RPE distribution
+    view.appendChild(el('h2', null, ['RPE distribution']));
+    const rpeBuckets = {};
+    yielding.forEach(l => { if (l.topSetRPE != null) { const k = (Math.round(l.topSetRPE * 2) / 2).toFixed(1); rpeBuckets[k] = (rpeBuckets[k] || 0) + 1; } });
+    const rpeBars = Object.keys(rpeBuckets).sort((a, b) => +a - +b).map(k => ({ label: '@' + k, value: rpeBuckets[k], full: k }));
+    view.appendChild(rpeBars.length ? el('div', { class: 'card' }, [barChart(rpeBars, 'sessions', { color: '#9b7bf0', intY: true })])
+      : el('div', { class: 'card' }, ['No RPE data yet.']));
+
+    // grip breakdown
+    view.appendChild(el('h2', null, ['Grip breakdown']));
+    const gripCount = {};
+    logs.forEach(l => { if (l.grip) gripCount[l.grip] = (gripCount[l.grip] || 0) + 1; });
+    const gripBars = Object.keys(gripCount).sort((a, b) => gripCount[b] - gripCount[a]).map(k => ({ label: k.replace(/([A-Z])/g, ' $1').trim(), value: gripCount[k], full: k }));
+    view.appendChild(gripBars.length ? el('div', { class: 'card' }, [barChart(gripBars, 'sessions', { color: '#4ecb71', intY: true })])
+      : el('div', { class: 'card' }, ['No grip data yet.']));
 
     // benchmark history table
     view.appendChild(el('h2', null, ['Benchmark history']));
@@ -561,56 +590,205 @@
     for (const k in attrs) n.setAttribute(k, attrs[k]);
     return n;
   }
-  function lineChart(series, unit) {
-    const W = 600, H = 260, pad = 36;
+
+  // shared tooltip (one per document)
+  function tooltipEl() {
+    let t = document.getElementById('chart-tip');
+    if (!t) { t = el('div', { id: 'chart-tip', class: 'chart-tip' }); document.body.appendChild(t); }
+    return t;
+  }
+  function bindTip(node, html) {
+    const show = (e) => {
+      const t = tooltipEl(); t.innerHTML = html; t.style.opacity = '1';
+      const pt = e.touches ? e.touches[0] : e;
+      t.style.left = pt.clientX + 'px';
+      t.style.top = (pt.clientY - 12) + 'px';
+    };
+    const hide = () => { tooltipEl().style.opacity = '0'; };
+    node.addEventListener('pointerenter', show);
+    node.addEventListener('pointermove', show);
+    node.addEventListener('pointerleave', hide);
+    node.addEventListener('touchstart', show, { passive: true });
+    node.addEventListener('touchend', hide);
+    node.style.cursor = 'pointer';
+  }
+
+  // nice rounded tick values between min and max
+  function niceTicks(min, max, count) {
+    if (min === max) { max = min + 1; }
+    const range = max - min;
+    const raw = range / (count - 1);
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / mag;
+    const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
+    const lo = Math.floor(min / step) * step, hi = Math.ceil(max / step) * step;
+    const out = [];
+    for (let v = lo; v <= hi + 1e-9; v += step) out.push(Math.round(v * 100) / 100);
+    return out;
+  }
+  function fmtShort(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function lineChart(series, unit, opts) {
+    opts = opts || {};
+    const W = 600, H = 280, padL = 42, padR = 14, padT = 14, padB = 40;
     const all = series.flatMap(s => s.pts);
     const dates = Array.from(new Set(all.map(p => p.x))).sort();
     const ys = all.map(p => p.y);
-    const ymin = Math.min.apply(null, ys) - 1, ymax = Math.max.apply(null, ys) + 1;
-    const xFor = (x) => pad + (dates.length <= 1 ? 0.5 : dates.indexOf(x) / (dates.length - 1)) * (W - 2 * pad);
-    const yFor = (y) => H - pad - ((y - ymin) / (ymax - ymin || 1)) * (H - 2 * pad);
+    const dataMin = Math.min.apply(null, ys), dataMax = Math.max.apply(null, ys);
+    const ticks = niceTicks(dataMin, dataMax, 5);
+    const ymin = ticks[0], ymax = ticks[ticks.length - 1];
+    const xFor = (x) => padL + (dates.length <= 1 ? 0.5 : dates.indexOf(x) / (dates.length - 1)) * (W - padL - padR);
+    const yFor = (y) => H - padB - ((y - ymin) / (ymax - ymin || 1)) * (H - padT - padB);
     const svg = svgNS('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
-    // axes
-    svg.appendChild(svgNS('line', { x1: pad, y1: H - pad, x2: W - pad, y2: H - pad, stroke: '#333', 'stroke-width': 1 }));
-    [ymin, (ymin + ymax) / 2, ymax].forEach(yv => {
-      svg.appendChild(svgNS('text', { x: 4, y: yFor(yv) + 4, fill: '#777', 'font-size': 11 })).textContent = yv.toFixed(0);
+
+    // horizontal gridlines + y labels
+    ticks.forEach(yv => {
+      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(yv), x2: W - padR, y2: yFor(yv), stroke: 'rgba(255,255,255,0.07)', 'stroke-width': 1 }));
+      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#9a9aa8', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
     });
+    // axis title
+    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#9a9aa8', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
+    // x labels (thinned to ~6)
+    const step = Math.max(1, Math.ceil(dates.length / 6));
+    dates.forEach((dt, i) => {
+      if (i % step !== 0 && i !== dates.length - 1) return;
+      const tx = svgNS('text', { x: xFor(dt), y: H - padB + 16, fill: '#9a9aa8', 'font-size': 10, 'text-anchor': 'middle' });
+      tx.textContent = fmtShort(dt); svg.appendChild(tx);
+    });
+
     series.forEach(s => {
       if (s.pts.length === 0) return;
+      // moving average (3-pt) underlay
+      if (opts.movingAvg && s.pts.length >= 3) {
+        let d = '';
+        s.pts.forEach((p, i) => {
+          const w = s.pts.slice(Math.max(0, i - 1), i + 2);
+          const avg = w.reduce((a, b) => a + b.y, 0) / w.length;
+          d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(avg);
+        });
+        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#9a9aa8', 'stroke-width': 1.5, 'stroke-dasharray': '4 4', opacity: 0.7 }));
+      }
       let d = '';
       s.pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(p.y); });
       svg.appendChild(svgNS('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
-      s.pts.forEach(p => svg.appendChild(svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 3.5, fill: s.color })));
+      // PR markers + points
+      let best = -Infinity;
+      s.pts.forEach(p => {
+        const isPR = opts.prMarkers && p.y > best;
+        if (p.y > best) best = p.y;
+        if (isPR) {
+          svg.appendChild(svgNS('path', { d: prStar(xFor(p.x), yFor(p.y) - 11, 4.5), fill: s.color, opacity: 0.9 }));
+        }
+        const c = svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 4, fill: s.color, stroke: '#0a0a0f', 'stroke-width': 1 });
+        bindTip(c, `<b>${(s.name || '') + ' '}${p.y} ${unit}</b><br>${fmtShort(p.x)}${isPR ? '<br>🏆 PR' : ''}`);
+        svg.appendChild(c);
+      });
     });
     return svg;
   }
-  function barChart(bars, unit) {
-    const W = 600, H = 220, pad = 32;
+
+  function prStar(cx, cy, r) {
+    let d = '';
+    for (let i = 0; i < 10; i++) {
+      const ang = Math.PI / 2 + i * Math.PI / 5;
+      const rad = i % 2 === 0 ? r : r * 0.45;
+      d += (i ? 'L' : 'M') + (cx + rad * Math.cos(ang)) + ' ' + (cy - rad * Math.sin(ang)) + ' ';
+    }
+    return d + 'Z';
+  }
+
+  function barChart(bars, unit, opts) {
+    opts = opts || {};
+    const color = opts.color || '#4f8ef7';
+    const W = 600, H = 240, padL = 42, padR = 14, padT = 14, padB = 38;
     const max = Math.max.apply(null, bars.map(b => b.value)) || 1;
-    const bw = (W - 2 * pad) / bars.length;
+    const ticks = niceTicks(0, max, opts.intY ? Math.min(5, max + 1) : 5).filter(t => t >= 0);
+    const ymax = ticks[ticks.length - 1] || 1;
+    const yFor = (v) => H - padB - (v / ymax) * (H - padT - padB);
+    const bw = (W - padL - padR) / bars.length;
     const svg = svgNS('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
+    // gridlines + y labels
+    ticks.forEach(tv => {
+      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(tv), x2: W - padR, y2: yFor(tv), stroke: 'rgba(255,255,255,0.07)', 'stroke-width': 1 }));
+      const tx = svgNS('text', { x: padL - 6, y: yFor(tv) + 4, fill: '#9a9aa8', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = opts.intY ? Math.round(tv) : tv; svg.appendChild(tx);
+    });
+    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#9a9aa8', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
     bars.forEach((b, i) => {
-      const h = (b.value / max) * (H - 2 * pad);
-      svg.appendChild(svgNS('rect', { x: pad + i * bw + 4, y: H - pad - h, width: bw - 8, height: h, rx: 3, fill: '#4f8ef7' }));
-      const tx = svgNS('text', { x: pad + i * bw + bw / 2, y: H - pad + 14, fill: '#777', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = b.label; svg.appendChild(tx);
+      const h = (b.value / ymax) * (H - padT - padB);
+      const x = padL + i * bw + Math.min(6, bw * 0.12);
+      const rw = bw - 2 * Math.min(6, bw * 0.12);
+      const rect = svgNS('rect', { x, y: H - padB - h, width: rw, height: h, rx: 3, fill: color });
+      bindTip(rect, `<b>${b.value} ${unit}</b><br>${b.full || b.label}`);
+      svg.appendChild(rect);
+      // value label on top
+      if (bars.length <= 14) {
+        const vt = svgNS('text', { x: x + rw / 2, y: H - padB - h - 4, fill: '#f0f0f5', 'font-size': 10, 'text-anchor': 'middle' }); vt.textContent = b.value; svg.appendChild(vt);
+      }
+      // x label (thinned)
+      const lblStep = Math.max(1, Math.ceil(bars.length / 8));
+      if (i % lblStep === 0 || i === bars.length - 1) {
+        const tx = svgNS('text', { x: x + rw / 2, y: H - padB + 16, fill: '#9a9aa8', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = b.label; svg.appendChild(tx);
+      }
     });
     return svg;
   }
+
   function recoveryChart(pts) {
-    const W = 600, H = 200, pad = 28;
-    const xFor = (i) => pad + (pts.length <= 1 ? 0.5 : i / (pts.length - 1)) * (W - 2 * pad);
-    const yFor = (y) => H - pad - ((y - 1) / 4) * (H - 2 * pad);
+    const W = 600, H = 220, padL = 28, padR = 14, padT = 14, padB = 38;
+    const xFor = (i) => padL + (pts.length <= 1 ? 0.5 : i / (pts.length - 1)) * (W - padL - padR);
+    const yFor = (y) => H - padB - ((y - 1) / 4) * (H - padT - padB);
     const svg = svgNS('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
     // zones: green>=4, amber 3, red<=2
-    [['#4ecb71', 4, 5], ['#f7b955', 3, 4], ['#ff6b6b', 1, 3]].forEach(z => {
-      svg.appendChild(svgNS('rect', { x: pad, y: yFor(z[2]), width: W - 2 * pad, height: yFor(z[1]) - yFor(z[2]), fill: z[0], opacity: 0.08 }));
+    [['#4ecb71', 4, 5, 'Good'], ['#f7b955', 3, 4, 'OK'], ['#ff6b6b', 1, 3, 'Sore']].forEach(z => {
+      svg.appendChild(svgNS('rect', { x: padL, y: yFor(z[2]), width: W - padL - padR, height: yFor(z[1]) - yFor(z[2]), fill: z[0], opacity: 0.08 }));
+      const lt = svgNS('text', { x: W - padR - 2, y: yFor((z[1] + z[2]) / 2) + 4, fill: z[0], 'font-size': 10, 'text-anchor': 'end', opacity: 0.7 }); lt.textContent = z[3]; svg.appendChild(lt);
+    });
+    // y ticks 1..5
+    [1, 2, 3, 4, 5].forEach(yv => {
+      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#9a9aa8', 'font-size': 10, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
+    });
+    // x labels
+    const step = Math.max(1, Math.ceil(pts.length / 6));
+    pts.forEach((p, i) => {
+      if (i % step !== 0 && i !== pts.length - 1) return;
+      const tx = svgNS('text', { x: xFor(i), y: H - padB + 16, fill: '#9a9aa8', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = fmtShort(p.x); svg.appendChild(tx);
     });
     let d = '';
     pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(i) + ' ' + yFor(p.y); });
     svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#f0f0f5', 'stroke-width': 2 }));
-    pts.forEach((p, i) => svg.appendChild(svgNS('circle', { cx: xFor(i), cy: yFor(p.y), r: 3,
-      fill: p.y >= 4 ? '#4ecb71' : p.y === 3 ? '#f7b955' : '#ff6b6b' })));
+    pts.forEach((p, i) => {
+      const c = svgNS('circle', { cx: xFor(i), cy: yFor(p.y), r: 4,
+        fill: p.y >= 4 ? '#4ecb71' : p.y === 3 ? '#f7b955' : '#ff6b6b', stroke: '#0a0a0f', 'stroke-width': 1 });
+      bindTip(c, `<b>Feel ${p.y}/5</b><br>${fmtShort(p.x)}`);
+      svg.appendChild(c);
+    });
     return svg;
+  }
+
+  // ---- stat summary helpers --------------------------------------------
+  function statGrid(stats) {
+    const grid = el('div', { class: 'stat-grid' });
+    stats.forEach(s => {
+      grid.appendChild(el('div', { class: 'stat' }, [
+        el('span', { class: 'stat-label' }, [s.label]),
+        el('span', { class: 'stat-value', style: s.color ? `color:${s.color}` : null }, [s.value]),
+        el('span', { class: 'stat-sub' }, [s.sub || ''])
+      ]));
+    });
+    return grid;
+  }
+  function summarizeSeries(label, pts, color) {
+    if (!pts.length) return { label, value: '—', sub: 'no data', color };
+    const latest = pts[pts.length - 1].y;
+    const first = pts[0].y;
+    const best = Math.max.apply(null, pts.map(p => p.y));
+    const delta = latest - first;
+    const pct = first ? Math.round((delta / first) * 100) : 0;
+    const sign = delta >= 0 ? '+' : '';
+    return { label, value: latest + ' kg', sub: `best ${best} · ${sign}${pct}%`, color };
   }
 
   // =====================================================================
