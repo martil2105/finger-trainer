@@ -509,7 +509,7 @@
       card.appendChild(el('div', { class: 'legend' }, [
         el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s E1RM']),
         el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s E1RM']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:#9a9aa8' }), '3-pt avg'])
+        el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:2px dashed #9a9aa8;height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), '3-pt trend'])
       ]));
       card.appendChild(lineChart([
         { pts: s5, color: '#4f8ef7', name: '5s' },
@@ -663,15 +663,17 @@
 
     series.forEach(s => {
       if (s.pts.length === 0) return;
-      // moving average (3-pt) underlay
+      // moving average (3-pt weighted binomial) underlay
       if (opts.movingAvg && s.pts.length >= 3) {
         let d = '';
         s.pts.forEach((p, i) => {
-          const w = s.pts.slice(Math.max(0, i - 1), i + 2);
-          const avg = w.reduce((a, b) => a + b.y, 0) / w.length;
+          const prev = s.pts[i - 1] ? s.pts[i - 1].y : p.y;
+          const curr = p.y;
+          const next = s.pts[i + 1] ? s.pts[i + 1].y : p.y;
+          const avg = 0.25 * prev + 0.5 * curr + 0.25 * next;
           d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(avg);
         });
-        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#9a9aa8', 'stroke-width': 1.5, 'stroke-dasharray': '4 4', opacity: 0.7 }));
+        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 1.5, 'stroke-dasharray': '4 4', opacity: 0.55 }));
       }
       let d = '';
       s.pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(p.y); });
