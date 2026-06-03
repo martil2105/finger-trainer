@@ -966,6 +966,45 @@
     view.appendChild(el('div', { class: 'spacer' }));
     view.appendChild(el('button', { class: 'btn danger', onclick: () => App.resetData() }, ['Reset all data']));
 
+    // Update Log
+    const cLog = el('details', { class: 'card tight', style: 'cursor:pointer;margin-top:20px' }, [
+      el('summary', { style: 'color:var(--accent);font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;justify-content:space-between' }, [
+        el('span', null, ['Recent Updates (Last: Jun 3, 2026)']),
+        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.7.0'])
+      ]),
+      el('div', { style: 'margin-top:12px;font-size:12.5px;line-height:1.55;display:flex;flex-direction:column;gap:8px' }, [
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.7.0 · Jun 3, 2026']),
+          'Smoothed E1RM trend lines with weighted binomial filters & color-coded series matching.'
+        ]),
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.6.0 · Jun 3, 2026']),
+          'Upgraded chart pointer hitboxes (r:20 circles & full-height bar rects) and touch-move swipe tooltips.'
+        ]),
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.5.0 · Jun 2, 2026']),
+          'iPhone 15 Pro PWA optimization: pure OLED black mode, iOS home indicator safe padding, and touch latency reduction.'
+        ]),
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.4.0 · Jun 2, 2026']),
+          'Implemented serverless GitHub Gist Sync with automatic Gist detection for instant cross-device backup.'
+        ]),
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.3.0 · Jun 2, 2026']),
+          'Changed OI primer sets to a flexible 3-5 sets scheme with interactive runner prompts.'
+        ]),
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.2.0 · Jun 1, 2026']),
+          'Integrated clickable program detail slots for direct workout launching & exact spreadsheet RPE ranges.'
+        ]),
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.1.0 · Jun 1, 2026']),
+          'Premium SVG tab icons, branding logo edge headers, and heavy/volume fatigue stop prompts.'
+        ])
+      ])
+    ]);
+    view.appendChild(cLog);
+
     const footer = el('div', { class: 'settings-footer' }, [
       el('img', { class: 'settings-logo', src: 'icons/icon-192.png', alt: 'Finger Trainer Logo' }),
       el('p', { class: 'muted center', style: 'margin:0' }, ['Finger Trainer · offline PWA · single user'])
