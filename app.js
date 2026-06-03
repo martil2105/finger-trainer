@@ -495,8 +495,8 @@
     view.appendChild(statGrid([
       summarizeSeries('5s E1RM', s5all, '#4f8ef7'),
       summarizeSeries('3s E1RM', s3all, '#ff6b6b'),
-      { label: 'Sessions', value: String(logs.length), sub: 'logged' },
-      { label: 'Yielding', value: String(yielding.length), sub: 'with E1RM' }
+      { label: 'Total Sessions', value: String(logs.length), sub: 'logged' },
+      { label: 'E1RM Sessions', value: String(yielding.length), sub: 'with E1RM' }
     ]));
 
     // E1RM chart, two series by duration
@@ -663,14 +663,18 @@
 
     series.forEach(s => {
       if (s.pts.length === 0) return;
-      // moving average (3-pt weighted binomial) underlay
+      // moving average (3-pt simple moving average) underlay
       if (opts.movingAvg && s.pts.length >= 3) {
         let d = '';
         s.pts.forEach((p, i) => {
-          const prev = s.pts[i - 1] ? s.pts[i - 1].y : p.y;
+          const prev = s.pts[i - 1] ? s.pts[i - 1].y : null;
           const curr = p.y;
-          const next = s.pts[i + 1] ? s.pts[i + 1].y : p.y;
-          const avg = 0.25 * prev + 0.5 * curr + 0.25 * next;
+          const next = s.pts[i + 1] ? s.pts[i + 1].y : null;
+          let sum = curr;
+          let count = 1;
+          if (prev !== null) { sum += prev; count++; }
+          if (next !== null) { sum += next; count++; }
+          const avg = sum / count;
           d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(avg);
         });
         svg.appendChild(svgNS('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 1.5, 'stroke-dasharray': '4 4', opacity: 0.55 }));
@@ -684,7 +688,15 @@
         const isPR = opts.prMarkers && p.y > best;
         if (p.y > best) best = p.y;
         if (isPR) {
-          svg.appendChild(svgNS('path', { d: prStar(xFor(p.x), yFor(p.y) - 11, 4.5), fill: s.color, opacity: 0.9 }));
+          const starText = svgNS('text', {
+            x: xFor(p.x),
+            y: yFor(p.y) - 9,
+            'text-anchor': 'middle',
+            'font-size': '12px',
+            style: 'pointer-events:none;user-select:none;'
+          });
+          starText.textContent = '⭐';
+          svg.appendChild(starText);
         }
         const c = svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 4, fill: s.color, stroke: '#0a0a0f', 'stroke-width': 1 });
         svg.appendChild(c);
@@ -696,16 +708,6 @@
       });
     });
     return svg;
-  }
-
-  function prStar(cx, cy, r) {
-    let d = '';
-    for (let i = 0; i < 10; i++) {
-      const ang = Math.PI / 2 + i * Math.PI / 5;
-      const rad = i % 2 === 0 ? r : r * 0.45;
-      d += (i ? 'L' : 'M') + (cx + rad * Math.cos(ang)) + ' ' + (cy - rad * Math.sin(ang)) + ' ';
-    }
-    return d + 'Z';
   }
 
   function barChart(bars, unit, opts) {
@@ -970,9 +972,13 @@
     const cLog = el('details', { class: 'card tight', style: 'cursor:pointer;margin-top:20px' }, [
       el('summary', { style: 'color:var(--accent);font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;justify-content:space-between' }, [
         el('span', null, ['Recent Updates (Last: Jun 3, 2026)']),
-        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.7.0'])
+        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.8.0'])
       ]),
       el('div', { style: 'margin-top:12px;font-size:12.5px;line-height:1.55;display:flex;flex-direction:column;gap:8px' }, [
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.8.0 · Jun 3, 2026']),
+          'Upgraded analytics summary cards, switched E1RM trend line to standard 3-point simple moving average, and added ⭐ PR emoji markers on new personal records.'
+        ]),
         el('div', { style: 'color:var(--text-dim)' }, [
           el('strong', { style: 'color:var(--text);display:block' }, ['v1.7.0 · Jun 3, 2026']),
           'Smoothed E1RM trend lines with weighted binomial filters & color-coded series matching.'
