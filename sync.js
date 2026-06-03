@@ -58,8 +58,23 @@
         'Content-Type': 'application/json'
       };
 
-      // 1. Fetch remote gist if linked
+      // 1. Search for existing Gist on GitHub if not linked locally
       let remoteData = null;
+      if (!gistId) {
+        status('Searching GitHub for existing sync Gist...');
+        const listRes = await fetch('https://api.github.com/gists', { headers });
+        if (listRes.ok) {
+          const gists = await listRes.json();
+          const existingGist = gists.find(g => g.files && g.files['finger-trainer-sync.json']);
+          if (existingGist) {
+            gistId = existingGist.id;
+            await DB.setMeta('githubGistId', gistId);
+            status('Found existing sync Gist on GitHub. Linking...');
+          }
+        }
+      }
+
+      // 2. Fetch remote gist if linked
       if (gistId) {
         status('Fetching remote Gist backup...');
         const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers });
