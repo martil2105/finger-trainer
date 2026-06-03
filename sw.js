@@ -1,5 +1,5 @@
 /* sw.js — offline app-shell cache. Bump CACHE on any asset change. */
-const CACHE = 'ft-v21';
+const CACHE = 'ft-v22';
 const ASSETS = [
   './',
   './index.html',

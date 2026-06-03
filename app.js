@@ -966,13 +966,9 @@
     const cLog = el('details', { class: 'card tight', style: 'cursor:pointer;margin-top:20px' }, [
       el('summary', { style: 'color:var(--accent);font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;justify-content:space-between' }, [
         el('span', null, ['Recent Updates (Last: Jun 3, 2026)']),
-        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.9.0'])
+        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.8.0'])
       ]),
       el('div', { style: 'margin-top:12px;font-size:12.5px;line-height:1.55;display:flex;flex-direction:column;gap:8px' }, [
-        el('div', { style: 'color:var(--text-dim)' }, [
-          el('strong', { style: 'color:var(--text);display:block' }, ['v1.9.0 · Jun 3, 2026']),
-          'Smoothed the E1RM trend line by upgrading the moving average calculation to a wider 5-point window.'
-        ]),
         el('div', { style: 'color:var(--text-dim)' }, [
           el('strong', { style: 'color:var(--text);display:block' }, ['v1.8.0 · Jun 3, 2026']),
           'Upgraded analytics summary cards, switched E1RM trend line to standard 3-point simple moving average, and added ⭐ PR emoji markers on new personal records.'
