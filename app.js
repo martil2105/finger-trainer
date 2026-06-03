@@ -663,23 +663,15 @@
 
     series.forEach(s => {
       if (s.pts.length === 0) return;
-      // moving average (5-pt simple moving average) underlay
+      // moving average (3-pt) underlay
       if (opts.movingAvg && s.pts.length >= 3) {
         let d = '';
         s.pts.forEach((p, i) => {
-          let sum = 0;
-          let count = 0;
-          for (let offset = -2; offset <= 2; offset++) {
-            const idx = i + offset;
-            if (idx >= 0 && idx < s.pts.length) {
-              sum += s.pts[idx].y;
-              count++;
-            }
-          }
-          const avg = sum / count;
+          const w = s.pts.slice(Math.max(0, i - 1), i + 2);
+          const avg = w.reduce((a, b) => a + b.y, 0) / w.length;
           d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(avg);
         });
-        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 1.5, 'stroke-dasharray': '4 4', opacity: 0.55 }));
+        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#9a9aa8', 'stroke-width': 1.5, 'stroke-dasharray': '4 4', opacity: 0.7 }));
       }
       let d = '';
       s.pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(p.y); });
