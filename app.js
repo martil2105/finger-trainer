@@ -600,16 +600,18 @@
   function bindTip(node, html) {
     const show = (e) => {
       const t = tooltipEl(); t.innerHTML = html; t.style.opacity = '1';
-      const pt = e.touches ? e.touches[0] : e;
+      const pt = e.touches && e.touches.length ? e.touches[0] : e;
       t.style.left = pt.clientX + 'px';
-      t.style.top = (pt.clientY - 12) + 'px';
+      t.style.top = (pt.clientY - 24) + 'px'; // Offset higher to avoid finger block on touch
     };
     const hide = () => { tooltipEl().style.opacity = '0'; };
     node.addEventListener('pointerenter', show);
     node.addEventListener('pointermove', show);
     node.addEventListener('pointerleave', hide);
     node.addEventListener('touchstart', show, { passive: true });
+    node.addEventListener('touchmove', show, { passive: true });
     node.addEventListener('touchend', hide);
+    node.addEventListener('touchcancel', hide);
     node.style.cursor = 'pointer';
   }
 
@@ -683,8 +685,12 @@
           svg.appendChild(svgNS('path', { d: prStar(xFor(p.x), yFor(p.y) - 11, 4.5), fill: s.color, opacity: 0.9 }));
         }
         const c = svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 4, fill: s.color, stroke: '#0a0a0f', 'stroke-width': 1 });
-        bindTip(c, `<b>${(s.name || '') + ' '}${p.y} ${unit}</b><br>${fmtShort(p.x)}${isPR ? '<br>🏆 PR' : ''}`);
         svg.appendChild(c);
+        
+        // Large transparent hit target for easy pointing/touch on mobile
+        const hit = svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 20, fill: 'transparent', opacity: 0 });
+        bindTip(hit, `<b>${(s.name || '') + ' '}${p.y} ${unit}</b><br>${fmtShort(p.x)}${isPR ? '<br>🏆 PR' : ''}`);
+        svg.appendChild(hit);
       });
     });
     return svg;
@@ -721,8 +727,12 @@
       const x = padL + i * bw + Math.min(6, bw * 0.12);
       const rw = bw - 2 * Math.min(6, bw * 0.12);
       const rect = svgNS('rect', { x, y: H - padB - h, width: rw, height: h, rx: 3, fill: color });
-      bindTip(rect, `<b>${b.value} ${unit}</b><br>${b.full || b.label}`);
       svg.appendChild(rect);
+
+      // Full-height transparent hit target for easy pointing/touch on mobile
+      const hit = svgNS('rect', { x, y: padT, width: rw, height: H - padB - padT, fill: 'transparent', opacity: 0 });
+      bindTip(hit, `<b>${b.value} ${unit}</b><br>${b.full || b.label}`);
+      svg.appendChild(hit);
       // value label on top
       if (bars.length <= 14) {
         const vt = svgNS('text', { x: x + rw / 2, y: H - padB - h - 4, fill: '#f0f0f5', 'font-size': 10, 'text-anchor': 'middle' }); vt.textContent = b.value; svg.appendChild(vt);
@@ -762,8 +772,12 @@
     pts.forEach((p, i) => {
       const c = svgNS('circle', { cx: xFor(i), cy: yFor(p.y), r: 4,
         fill: p.y >= 4 ? '#4ecb71' : p.y === 3 ? '#f7b955' : '#ff6b6b', stroke: '#0a0a0f', 'stroke-width': 1 });
-      bindTip(c, `<b>Feel ${p.y}/5</b><br>${fmtShort(p.x)}`);
       svg.appendChild(c);
+
+      // Large transparent hit target for easy pointing/touch on mobile
+      const hit = svgNS('circle', { cx: xFor(i), cy: yFor(p.y), r: 20, fill: 'transparent', opacity: 0 });
+      bindTip(hit, `<b>Feel ${p.y}/5</b><br>${fmtShort(p.x)}`);
+      svg.appendChild(hit);
     });
     return svg;
   }

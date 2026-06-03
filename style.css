@@ -163,9 +163,10 @@ svg.chart { width: 100%; height: auto; display: block; touch-action: none; }
 .chart-tip {
   position: fixed; z-index: 9999; pointer-events: none; opacity: 0;
   transform: translate(-50%, -100%); transition: opacity .08s;
-  background: rgba(20,20,28,0.96); border: 1px solid var(--card-border);
+  background: rgba(10,10,15,0.92); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.12);
   color: var(--text); font-size: 12px; line-height: 1.35; padding: 6px 9px;
-  border-radius: 8px; white-space: nowrap; box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  border-radius: 8px; white-space: nowrap; box-shadow: 0 6px 20px rgba(0,0,0,0.45);
 }
 .chart-tip b { font-weight: 600; }
 
