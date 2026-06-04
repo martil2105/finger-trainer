@@ -665,11 +665,18 @@
       if (s.pts.length === 0) return;
       // moving average (3-pt) underlay
       if (opts.movingAvg && s.pts.length >= 3) {
-        let d = '';
-        s.pts.forEach((p, i) => {
+        const avgPts = s.pts.map((p, i) => {
           const w = s.pts.slice(Math.max(0, i - 1), i + 2);
-          const avg = w.reduce((a, b) => a + b.y, 0) / w.length;
-          d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(avg);
+          return { x: xFor(p.x), y: yFor(w.reduce((a, b) => a + b.y, 0) / w.length) };
+        });
+        let d = '';
+        avgPts.forEach((p, i) => {
+          if (i === 0) d += `M${p.x} ${p.y}`;
+          else {
+            const prev = avgPts[i - 1];
+            const cpX = (prev.x + p.x) / 2;
+            d += ` C ${cpX} ${prev.y}, ${cpX} ${p.y}, ${p.x} ${p.y}`;
+          }
         });
         svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#9a9aa8', 'stroke-width': 1.5, 'stroke-dasharray': '4 4', opacity: 0.7 }));
       }
@@ -981,9 +988,13 @@
     const cLog = el('details', { class: 'card tight', style: 'cursor:pointer;margin-top:20px' }, [
       el('summary', { style: 'color:var(--accent);font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;justify-content:space-between' }, [
         el('span', null, ['Recent Updates (Last: Jun 4, 2026)']),
-        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.9.0'])
+        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.9.1'])
       ]),
       el('div', { style: 'margin-top:12px;font-size:12.5px;line-height:1.55;display:flex;flex-direction:column;gap:8px' }, [
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.9.1 · Jun 4, 2026']),
+          'Smoothed E1RM trend chart moving average lines using cubic Bezier curves.'
+        ]),
         el('div', { style: 'color:var(--text-dim)' }, [
           el('strong', { style: 'color:var(--text);display:block' }, ['v1.9.0 · Jun 4, 2026']),
           'Fixed iOS Safari date input layout overflow / collapsing bugs, and added delete buttons to settings Working Max (WM) history entries.'
