@@ -73,13 +73,21 @@
       }
       else { totalEfforts = plan.sets || 1; }
 
+      // Readiness check applies to load-based hang sessions (not OI primer).
+      const loadBased = plan.protocol && plan.protocol !== 'oi';
+      const wm5 = await DB.currentWM(5);
+      const warmupRef = (wm5 && wm5.valueKg != null) ? wm5.valueKg
+        : (plan.anchor != null ? plan.anchor : null);
+      const warmupKg = warmupRef != null ? Calc.roundTo05(warmupRef * 0.7) : null;
+
       R = {
-        plan, restDefault, phase: 'PREP', effort: 0, totalEfforts,
+        plan, restDefault, phase: loadBased ? 'READINESS' : 'PREP', effort: 0, totalEfforts,
         hangSeconds: plan.duration || 5,
         sets: [], // logged efforts {load,rpe}
         curLoad: plan.anchor != null ? plan.anchor : (plan.role === 'OIprimer' ? null : 25),
         curRPE: typeof plan.rpe === 'number' ? plan.rpe : (plan.rpe ? Calc.parseRPE(plan.rpe) : 9),
-        timeLeft: 0, stopped: false
+        timeLeft: 0, stopped: false,
+        warmupKg, readiness: null, skipExtensions: false
       };
       renderRunner();
     } catch (err) {
@@ -119,11 +127,61 @@
 
   function renderRunner() {
     clearTick();
+    if (R.phase === 'READINESS') return renderReadiness();
     if (R.phase === 'PREP') return renderPrep();
     if (R.phase === 'HANG') return renderHang();
     if (R.phase === 'LOG_SET') return renderLogSet();
     if (R.phase === 'REST') return renderRest();
     if (R.phase === 'END') return renderEnd();
+  }
+
+  // ---- readiness check (autoregulation from the Reference sheet) --------
+  function renderReadiness() {
+    const rpeSt = App.stepper({ min: 5, max: 10, step: 0.5, value: 6, fmt: v => '@' + v });
+    const wrap = shell('', { body: '', foot: '' });
+    const rb = wrap.querySelector('.r-body'); rb.style.justifyContent = 'flex-start'; rb.style.paddingTop = '10px'; rb.innerHTML = '';
+    const box = document.createElement('div'); box.style.width = '100%';
+    box.innerHTML = `<div class="phase" style="text-align:center">Readiness check</div>
+      <p class="muted center" style="margin-top:10px">Do one easy warmup hang at ${R.warmupKg != null ? '~' + R.warmupKg + ' kg (≈70% of your 5s max)' : '≈70% of your 5s max'} for 5s, then rate how hard it felt.</p>`;
+    const guide = document.createElement('p'); guide.className = 'muted center'; guide.style.fontSize = '12.5px';
+    guide.textContent = 'Normal is @5–6. @7+ → loads drop and no fatigue extensions today. @8+ or any joint tenderness → the rule says skip today.';
+    const f = document.createElement('div'); f.className = 'field'; f.innerHTML = '<label>Warmup hang RPE</label>'; f.appendChild(rpeSt);
+    box.appendChild(guide); box.appendChild(f); rb.appendChild(box);
+    const rf = wrap.querySelector('.r-foot'); rf.innerHTML = '';
+    const go = document.createElement('button'); go.className = 'btn'; go.textContent = 'Apply & continue';
+    go.addEventListener('click', () => applyReadiness(rpeSt.getValue()));
+    const skip = document.createElement('button'); skip.className = 'btn secondary'; skip.textContent = 'Skip check';
+    skip.addEventListener('click', () => { R.phase = 'PREP'; renderPrep(); });
+    rf.appendChild(go); rf.appendChild(skip);
+  }
+
+  function setReadiness(rpe, factor) {
+    const dropPct = Math.round((1 - factor) * 100);
+    R.readiness = { rpe, factor, dropPct };
+    if (factor < 1) {
+      if (R.curLoad != null) R.curLoad = Calc.roundTo05(R.curLoad * factor);
+      R.skipExtensions = true;
+      if (R.plan.protocol === 'topSetPlusBackoffs') R.totalEfforts = Math.max(1, R.totalEfforts - 1);
+      R.readiness.note = `Readiness @${rpe} — loads dropped ~${dropPct}% and fatigue extensions off today. Stop at any joint discomfort.`;
+    } else {
+      R.readiness.note = `Readiness @${rpe} — good to go.`;
+    }
+  }
+
+  function applyReadiness(rpe) {
+    if (rpe >= 8) {
+      return App.confirm(
+        `Warmup felt @${rpe}. With even the warmup that hard, joint load is high — the autoregulation rule says skip today to protect your tendons.`,
+        'Skip today', () => cancelSession(),
+        () => { setReadiness(rpe, 0.90); R.phase = 'PREP'; renderPrep(); },
+        'Train lighter anyway');
+    }
+    setReadiness(rpe, rpe >= 7 ? 0.93 : 1);
+    R.phase = 'PREP'; renderPrep();
+  }
+
+  function cancelSession() {
+    clearTick(); releaseWakeLock(); host().innerHTML = ''; R = null; App.closeSheet(); App.render();
   }
 
   function renderPrep() {
@@ -139,7 +197,8 @@
              <div style="color:#9a9aa8">${lines.join(' · ')}</div>
              ${p.protocol === 'fixedVolume' ? '<div style="color:#f7b955;margin-top:14px">Fixed sets — no extensions. RPE creep: if @8.5+ by set 3, drop load 5%.</div>' : ''}
              ${p.protocol === 'topSetPlusBackoffs' ? '<div style="color:#f7b955;margin-top:14px">Fatigue stop rule is active for back-offs.</div>' : ''}
-             ${p.protocol === 'maxSingles' ? '<div style="color:#ff6b6b;margin-top:14px">Max singles — full rest, no back-offs.</div>' : ''}`,
+             ${p.protocol === 'maxSingles' ? '<div style="color:#ff6b6b;margin-top:14px">Max singles — full rest, no back-offs.</div>' : ''}
+             ${R.readiness && R.readiness.note ? '<div style="color:' + (R.readiness.factor < 1 ? '#f7b955' : '#4ecb71') + ';margin-top:14px">' + R.readiness.note + '</div>' : ''}`,
       foot: `<button class="btn" id="r-ready">Ready — start countdown</button>
              <p class="muted center">Keep the screen on. Audio cues will guide you.</p>`
     });

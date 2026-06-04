@@ -182,6 +182,37 @@
     return { flagged: !!flagged, latest, rollingAvg, prevAvg };
   }
 
+  // ---- inter-week fatigue trend (Reference: 2 declining weeks = deload) -
+  // Groups Yielding E1RM by ISO week (Mon-anchored), takes each week's best,
+  // and flags when the last three logged weeks strictly decline. E1RM already
+  // normalises for RPE, so this approximates "declining performance at the
+  // same RPE" without needing identical loads week to week.
+  function isoWeekStart(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    const day = (d.getDay() + 6) % 7; // Mon=0
+    d.setDate(d.getDate() - day);
+    return d.toISOString().slice(0, 10);
+  }
+  function deloadTrend(entries) {
+    const byWeek = {};
+    (entries || []).forEach(e => {
+      if (e.type !== 'Yielding' || e.e1rmKg == null) return;
+      const wk = isoWeekStart(e.date);
+      if (byWeek[wk] == null || e.e1rmKg > byWeek[wk]) byWeek[wk] = e.e1rmKg;
+    });
+    const keys = Object.keys(byWeek).sort();
+    if (keys.length < 3) return { flagged: false, weeks: [] };
+    const last3 = keys.slice(-3).map(w => ({ week: w, e1rm: byWeek[w] }));
+    const [a, b, c] = last3;
+    const flagged = b.e1rm < a.e1rm && c.e1rm < b.e1rm;
+    return {
+      flagged, weeks: last3,
+      message: flagged
+        ? `Top-end E1RM has slipped two weeks running (${a.e1rm} → ${b.e1rm} → ${c.e1rm} kg at matched effort) — the classic accumulated-fatigue signal. Consider a deload week. (Suggestion, not a rule.)`
+        : null
+    };
+  }
+
   // ---- 6.5 WM jump guard ------------------------------------------------
   function wmJumpGuard(newWM, currentWM) {
     if (currentWM == null || currentWM === 0) return { triggered: false, pct: null };
@@ -290,7 +321,7 @@
     roundTo, roundTo05, roundTo025, lerp, avg,
     e1rm, heavyAnchor, volumeAnchor, backoffAnchor, deloadAnchor,
     expandBlock, expandCycle, annotateWeekAnchors,
-    recoveryFlag, wmJumpGuard, guardrails,
+    recoveryFlag, deloadTrend, wmJumpGuard, guardrails,
     addDays, daysBetween, weekNumberFor, parseRPE
   };
 

@@ -17,7 +17,14 @@
     return n;
   }
   const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-  const todayISO = () => new Date().toISOString().slice(0, 10);
+  // Local calendar date (NOT UTC). Using toISOString() directly stamps an
+  // evening session in a behind-UTC timezone onto the next day, which then
+  // mismatches the day-of-week the rest of the app derives from the date.
+  const todayISO = () => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  };
   function fmtDate(iso) {
     const d = new Date(iso + 'T00:00:00');
     return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -162,7 +169,19 @@
     view.innerHTML = '';
     const fn = { today: renderToday, program: renderProgram, analytics: renderAnalytics,
                  history: renderHistory, settings: renderSettings }[App.state.tab];
-    await fn(view);
+    try {
+      await fn(view);
+    } catch (err) {
+      // Error boundary: a single corrupt record must not leave a blank screen.
+      console.error('Render error:', err);
+      view.innerHTML = '';
+      view.appendChild(el('div', { class: 'card' }, [
+        el('h2', { style: 'margin-top:0' }, ['Something went wrong']),
+        el('p', { class: 'muted' }, [String((err && err.message) || err)]),
+        el('button', { class: 'btn secondary', onclick: () => App.render() }, ['Retry']),
+        el('button', { class: 'btn ghost small', onclick: () => App.go('settings') }, ['Open Settings'])
+      ]));
+    }
     view.scrollTo ? view.scrollTo(0, 0) : window.scrollTo(0, 0);
   };
   App.go = function (tab) { App.state.tab = tab; App.render(); };
@@ -223,6 +242,10 @@
       view.appendChild(el('div', { class: 'banner warn' }, [
         'Recovery trending down — consider dropping a set or taking an extra rest day. (Suggestion, not a rule.)'
       ]));
+    }
+    const deload = Calc.deloadTrend(logs);
+    if (deload.flagged) {
+      view.appendChild(el('div', { class: 'banner warn' }, [deload.message]));
     }
 
     // session card
@@ -492,9 +515,16 @@
     // ---- summary stat cards ----
     const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: l.e1rmKg }));
     const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: l.e1rmKg }));
+    const bw = await DB.getMeta('bodyweightKg');
+    const best5 = s5all.length ? Math.max.apply(null, s5all.map(p => p.y)) : null;
+    const totalCard = (bw && best5 != null)
+      ? { label: 'Peak total load', value: Calc.roundTo(bw + best5, 1) + ' kg',
+          sub: Math.round(((bw + best5) / bw) * 100) + '% BW', color: '#4ecb71' }
+      : { label: 'Peak total load', value: '—', sub: bw ? 'no 5s E1RM yet' : 'set bodyweight' };
     view.appendChild(statGrid([
       summarizeSeries('5s E1RM', s5all, '#4f8ef7'),
       summarizeSeries('3s E1RM', s3all, '#ff6b6b'),
+      totalCard,
       { label: 'Total Sessions', value: String(logs.length), sub: 'logged' },
       { label: 'E1RM Sessions', value: String(yielding.length), sub: 'with E1RM' }
     ]));
@@ -862,10 +892,25 @@
   // =====================================================================
   async function renderSettings(view) {
     view.appendChild(el('h1', null, ['Settings']));
-    const [w5, w3] = await Promise.all([DB.currentWM(5), DB.currentWM(3)]);
+    const [w5, w3, bw] = await Promise.all([DB.currentWM(5), DB.currentWM(3), DB.getMeta('bodyweightKg')]);
 
     view.appendChild(wmEditor('5s Working Max', 5, w5));
     view.appendChild(wmEditor('3s Working Max', 3, w3));
+
+    // Bodyweight — used for total-load (bodyweight + added) and %BW analytics.
+    const bwCard = el('div', { class: 'card' });
+    bwCard.appendChild(el('div', { class: 'row' }, [
+      el('h2', { style: 'margin:0' }, ['Bodyweight']),
+      el('span', { class: 'muted' }, [bw != null ? bw + ' kg' : 'not set'])
+    ]));
+    const bwStep = stepper({ min: 30, max: 150, step: 0.5, value: bw != null ? bw : 67.5, fmt: v => v + ' kg' });
+    bwCard.appendChild(el('div', { class: 'field' }, [bwStep]));
+    bwCard.appendChild(el('button', { class: 'btn small', onclick: async () => {
+      await DB.setMeta('bodyweightKg', bwStep.getValue());
+      App.render();
+    } }, ['Save bodyweight']));
+    bwCard.appendChild(el('p', { class: 'muted', style: 'margin:8px 0 0' }, ['Used to show total load (bodyweight + added) and %BW in Analytics. Stamped onto new sessions you log.']));
+    view.appendChild(bwCard);
 
     // WM history
     const allWM = (await DB.getAll('workingMaxes')).sort((a, b) => a.date < b.date ? 1 : -1);
@@ -993,7 +1038,11 @@
 
     view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.importBundledHistory() }, ['Load my spreadsheet history (19 sessions)']));
     view.appendChild(el('div', { class: 'spacer' }));
-    view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.exportCSV() }, ['Export CSV']));
+    view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.exportCSV() }, ['Export CSV (logs only)']));
+    view.appendChild(el('div', { class: 'spacer' }));
+    view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.exportBackupJSON() }, ['Export full backup (JSON)']));
+    view.appendChild(el('div', { class: 'spacer' }));
+    view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.importBackupJSON() }, ['Restore backup (JSON)']));
     view.appendChild(el('div', { class: 'spacer' }));
     view.appendChild(el('button', { class: 'btn danger', onclick: () => App.resetData() }, ['Reset all data']));
 
@@ -1153,12 +1202,13 @@
 
     body.push(el('button', { class: 'btn', onclick: async () => {
       const blk = e.block || await blockNameFor(state.date);
+      const bw = e.bodyweightKg != null ? e.bodyweightKg : (await DB.getMeta('bodyweightKg')) || null;
       const entry = {
         id: e.id || Templates.uid(), date: state.date, type: state.type, role: state.role, venue: state.venue,
         hangDurationSeconds: state.type === 'Yielding' ? state.hangDurationSeconds : null, grip: state.grip,
         topSetLoadKg: state.type === 'Yielding' ? loadSt.getValue() : null,
         topSetRPE: state.type === 'Yielding' ? rpeSt.getValue() : null,
-        sets: setsSt.getValue(), bodyweightKg: e.bodyweightKg || null,
+        sets: setsSt.getValue(), bodyweightKg: bw,
         taxing: taxR.getValue(), feltStrong: feltR.getValue(), nextDayFeel: state.ndf != null ? state.ndf : (e.nextDayFeel || null),
         block: blk || '', notes: state.notes
       };
@@ -1260,7 +1310,11 @@
     if (type === 'OI') return 'OIprimer';
     return ''; // leave Yielding blanks unassigned rather than guessing Heavy vs Volume
   }
-  function num(v) { return (v != null && v !== '') ? +v : null; }
+  function num(v) {
+    if (v == null || v === '') return null;
+    const n = +v;
+    return Number.isFinite(n) ? n : null; // never store NaN — it breaks charts
+  }
 
   async function doImport(text) {
     const lines = parseCSV(text);
@@ -1320,6 +1374,48 @@
     return rows.filter(r => r.length > 1 || (r.length === 1 && r[0] !== ''));
   }
 
+  // ---- full database backup / restore (JSON) ---------------------------
+  // CSV only carries logs; this carries the whole DB (logs, working maxes,
+  // cycles, benchmarks, settings) so it's a complete, GitHub-independent
+  // safety net you can re-import on any device.
+  App.exportBackupJSON = async function () {
+    const data = await DB.exportBackup();
+    const payload = { app: 'finger-trainer', version: 1, exportedAt: new Date().toISOString(), data };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const a = el('a', { href: URL.createObjectURL(blob), download: `finger-trainer-backup-${todayISO()}.json` });
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  App.importBackupJSON = function () {
+    const input = el('input', { type: 'file', accept: '.json,application/json' });
+    input.addEventListener('change', () => {
+      const file = input.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        let parsed;
+        try { parsed = JSON.parse(reader.result); }
+        catch (e) { return App.confirm('That file is not valid JSON.', 'OK'); }
+        // accept either the wrapped payload or a bare data object
+        const data = parsed && parsed.data ? parsed.data : parsed;
+        const looksValid = data && (Array.isArray(data.logEntries) || Array.isArray(data.workingMaxes) ||
+          Array.isArray(data.cycles) || Array.isArray(data.benchmarks));
+        if (!looksValid) return App.confirm('This does not look like a Finger Trainer backup.', 'OK');
+        const counts = `${(data.logEntries || []).length} logs, ${(data.workingMaxes || []).length} working maxes, ${(data.cycles || []).length} cycles, ${(data.benchmarks || []).length} benchmarks`;
+        App.confirm(`Restore this backup? It will merge ${counts} into your current data (duplicates are collapsed automatically).`, 'Restore', async () => {
+          try {
+            await DB.importBackup(data);
+            await DB.dedupe();
+            App.confirm('Backup restored.', 'OK', () => App.go('today'));
+          } catch (e) {
+            App.confirm('Restore failed: ' + ((e && e.message) || e), 'OK');
+          }
+        });
+      };
+      reader.readAsText(file);
+    });
+    input.click();
+  };
+
   App.resetData = function () {
     App.confirm('Reset ALL data? This deletes every log, working max, and cycle.', 'Continue', () => {
       App.confirm('Are you absolutely sure? This cannot be undone.', 'Delete everything', async () => {
@@ -1330,12 +1426,13 @@
 
   // ---- session-end logging (called by Runner) --------------------------
   App.logSession = async function (plan, result) {
+    const bw = (await DB.getMeta('bodyweightKg')) || null;
     const entry = {
       id: Templates.uid(), date: todayISO(), type: plan.role === 'OIprimer' ? 'OI' : 'Yielding',
       role: plan.role, venue: 'Board', hangDurationSeconds: plan.duration || null, grip: 'HalfCrimp',
       topSetLoadKg: result.load != null ? result.load : null,
       topSetRPE: result.rpe != null ? result.rpe : null, sets: result.sets,
-      bodyweightKg: null, taxing: result.taxing, feltStrong: result.felt, nextDayFeel: null,
+      bodyweightKg: bw, taxing: result.taxing, feltStrong: result.felt, nextDayFeel: null,
       block: plan.blockName || '', notes: result.notes || ''
     };
     await DB.addLog(entry);
@@ -1350,7 +1447,12 @@
     t.addEventListener('click', () => App.go(t.dataset.tab)));
 
   (async function init() {
-    await DB.seedIfEmpty();
-    App.go('today');
+    try {
+      await DB.seedIfEmpty();
+      await DB.dedupe(); // clean up any duplicate/triplicate rows from past syncs
+    } catch (err) {
+      console.error('Init error:', err);
+    }
+    App.go('today'); // render() has its own error boundary
   })();
 })();

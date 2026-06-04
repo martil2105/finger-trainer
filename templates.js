@@ -103,13 +103,16 @@
     row('2026-05-19', 'Yielding', 'Other', 'Heavy', 25, 10, 3, 1, 4, 3, 'Trans I 1/4', 'Only hb, felt disconnected'),
     row('2026-05-24', 'OI', 'Gym', 'OIprimer', null, null, null, 4, 6, 3, 'Trans I 1/4', 'Felt ok after a long rest'),
     row('2026-05-26', 'Yielding', 'Board', 'Heavy', 25, 9, 3, 3, 8, 4, 'Trans I 1/4', 'Felt strong on hb, 25 felt controlled, spray was easy'),
-    row('2026-05-28', 'OI', 'Gym', 'OIprimer', null, null, null, 4, 5, null, 'Trans I 1/4', 'Tired after work'),
-    row('2026-05-31', 'Yielding', 'Other', 'Volume', null, null, null, 2, 7, null, 'Trans I 1/4', 'Good sesh ggs!')
+    row('2026-05-28', 'OI', 'Gym', 'OIprimer', null, null, null, 4, 5, 3, 'Trans I 1/4', 'Tired after work'),
+    row('2026-05-31', 'Yielding', 'Other', 'Volume', 20, 7, 5, 2, 7, 3, 'Trans I 1/4', 'Good sesh ggs!')
   ];
 
   function row(date, type, venue, role, load, rpe, sets, taxing, felt, ndf, block, notes) {
     return {
-      id: uid(), date, type, venue, role,
+      // Deterministic id so the same seed session gets the SAME id on every
+      // device. Random ids here were the cause of duplicate/triplicate rows
+      // after Gist sync merged each device's differently-id'd copies.
+      id: 'seed_' + date, date, type, venue, role,
       hangDurationSeconds: (type === 'Yielding' ? 5 : null),
       grip: 'HalfCrimp',
       topSetLoadKg: load, topSetRPE: rpe, sets,

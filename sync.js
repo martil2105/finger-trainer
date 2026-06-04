@@ -20,6 +20,7 @@
       logEntries: mergeByUID(local.logEntries || [], remote.logEntries || []),
       workingMaxes: mergeByUID(local.workingMaxes || [], remote.workingMaxes || []),
       cycles: mergeByUID(local.cycles || [], remote.cycles || []),
+      benchmarks: mergeByUID(local.benchmarks || [], remote.benchmarks || []),
       meta: mergeMeta(local.meta || [], remote.meta || [])
     };
   }
@@ -39,8 +40,14 @@
     return Array.from(map.values());
   }
 
+  let _inFlight = false;
   async function run(onStatus) {
     const status = (msg) => { console.log('[Sync]', msg); onStatus && onStatus(msg); };
+    if (_inFlight) {
+      status('A sync is already in progress…');
+      return { success: false, error: 'Sync already running' };
+    }
+    _inFlight = true;
     try {
       const token = await DB.getMeta('githubToken');
       if (!token) {
@@ -105,11 +112,21 @@
       if (remoteData) {
         status('Merging local and remote entries...');
         mergedData = mergeDatabases(localData, remoteData);
-        status('Applying merged database locally...');
-        await DB.importBackup(mergedData);
       } else {
         status('Using local database as source...');
         mergedData = localData;
+      }
+
+      // 2b. Collapse logically-identical rows that carry different ids
+      // (old seed history, cross-device copies) so they don't accumulate.
+      mergedData = DB.dedupeDatabase(mergedData);
+
+      if (remoteData) {
+        status('Applying merged database locally...');
+        await DB.importBackup(mergedData);
+        // importBackup only writes — drop any stale duplicate rows still
+        // sitting in the local store so the UI matches the merged result.
+        await DB.dedupe();
       }
 
       const fileContent = JSON.stringify(mergedData, null, 2);
@@ -166,6 +183,8 @@
       console.error(err);
       status(`Sync failed: ${err.message}`);
       return { success: false, error: err.message };
+    } finally {
+      _inFlight = false;
     }
   }
 

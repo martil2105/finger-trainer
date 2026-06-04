@@ -93,8 +93,9 @@
     return getMeta('seeded').then(done => {
       if (done) return false;
       const cycle = Templates.templateA();
+      cycle.id = 'seed_cycle_main'; // stable id so devices don't duplicate it
       const wm = {
-        id: Templates.uid(), durationSeconds: 5, valueKg: 25,
+        id: 'seed_wm_5s_init', durationSeconds: 5, valueKg: 25,
         date: '2026-05-26', source: 'estimated',
         notes: 'Reset from +25kg given Thu @10 ceiling — recheck on rested day'
       };
@@ -110,15 +111,81 @@
     });
   }
 
+  // ---- de-duplication ---------------------------------------------------
+  // Records that are logically identical but carry different ids (e.g. the
+  // seed history that older versions re-created with a random id on every
+  // device) pile up when Gist sync merges by id. We collapse them using a
+  // content signature, keeping ONE deterministic winner so every device
+  // converges on the same surviving row.
+  function logKey(e) {
+    return ['log', e.date, e.type, e.role, e.venue,
+            e.topSetLoadKg, e.topSetRPE, e.sets, e.hangDurationSeconds,
+            e.notes].join('|');
+  }
+  function wmKey(w) {
+    return ['wm', w.date, w.durationSeconds, w.valueKg].join('|');
+  }
+  function cycleKey(c) {
+    return ['cycle', c.name, c.startDate].join('|');
+  }
+  function benchKey(b) {
+    // re-saving/editing a Test logs a fresh benchmark; collapse identical ones
+    return ['bench', b.date, b.durationSeconds, b.maxLoadKg, b.rpe].join('|');
+  }
+  function preferred(a, b) {
+    // Deterministic winner so every device converges on the same row.
+    // Stable 'seed_*' ids beat random ones; otherwise smallest id wins.
+    const aSeed = String(a.id).startsWith('seed_');
+    const bSeed = String(b.id).startsWith('seed_');
+    if (aSeed !== bSeed) return aSeed ? a : b;
+    return String(a.id) < String(b.id) ? a : b;
+  }
+  function dedupeByKey(arr, keyFn) {
+    const winners = new Map();
+    (arr || []).forEach(item => {
+      const k = keyFn(item);
+      const cur = winners.get(k);
+      winners.set(k, cur ? preferred(cur, item) : item);
+    });
+    return Array.from(winners.values());
+  }
+  // Pure helper used by the sync merge before data is written/uploaded.
+  function dedupeDatabase(data) {
+    return {
+      logEntries: dedupeByKey(data.logEntries || [], logKey),
+      workingMaxes: dedupeByKey(data.workingMaxes || [], wmKey),
+      cycles: dedupeByKey(data.cycles || [], cycleKey),
+      benchmarks: dedupeByKey(data.benchmarks || [], benchKey),
+      meta: data.meta || []
+    };
+  }
+  // Collapse duplicates already sitting in the local IndexedDB.
+  function dedupe() {
+    return Promise.all([
+      getAll('logEntries'), getAll('workingMaxes'), getAll('cycles'), getAll('benchmarks')
+    ]).then(([logs, wms, cycles, benchmarks]) => {
+      const ops = [];
+      [['logEntries', logs, logKey],
+       ['workingMaxes', wms, wmKey],
+       ['cycles', cycles, cycleKey],
+       ['benchmarks', benchmarks, benchKey]].forEach(([store, arr, keyFn]) => {
+        const keep = new Set(dedupeByKey(arr, keyFn).map(x => x.id));
+        arr.forEach(x => { if (!keep.has(x.id)) ops.push(del(store, x.id)); });
+      });
+      return Promise.all(ops).then(() => ops.length);
+    });
+  }
+
   function exportBackup() {
     return Promise.all([
       getAll('logEntries'),
       getAll('workingMaxes'),
       getAll('cycles'),
+      getAll('benchmarks'),
       getAll('meta')
-    ]).then(([logs, wms, cycles, meta]) => {
+    ]).then(([logs, wms, cycles, benchmarks, meta]) => {
       const cleanMeta = meta.filter(m => m.key !== 'githubToken' && m.key !== 'githubGistId');
-      return { logEntries: logs, workingMaxes: wms, cycles, meta: cleanMeta };
+      return { logEntries: logs, workingMaxes: wms, cycles, benchmarks, meta: cleanMeta };
     });
   }
 
@@ -133,6 +200,9 @@
     }
     if (data.cycles) {
       data.cycles.forEach(x => ops.push(put('cycles', x)));
+    }
+    if (data.benchmarks) {
+      data.benchmarks.forEach(x => ops.push(put('benchmarks', x)));
     }
     if (data.meta) {
       data.meta.forEach(x => {
@@ -154,6 +224,7 @@
   root.DB = {
     open, put, del, getAll, get, clear, getMeta, setMeta,
     currentWM, wmDurationsOnFile, activeCycle, logsNewestFirst, addLog,
-    seedIfEmpty, resetAll, exportBackup, importBackup
+    seedIfEmpty, resetAll, exportBackup, importBackup,
+    dedupe, dedupeDatabase
   };
 })(typeof self !== 'undefined' ? self : this);
