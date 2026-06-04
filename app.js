@@ -508,13 +508,12 @@
       const card = el('div', { class: 'card' });
       card.appendChild(el('div', { class: 'legend' }, [
         el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s E1RM']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s E1RM']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:2px dashed #9a9aa8;height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), '5-pt trend'])
+        el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s E1RM'])
       ]));
       card.appendChild(lineChart([
         { pts: s5, color: '#4f8ef7', name: '5s' },
         { pts: s3, color: '#ff6b6b', name: '3s' }
-      ], 'kg', { movingAvg: true, prMarkers: true }));
+      ], 'kg', { movingAvg: false, prMarkers: true }));
       view.appendChild(card);
     }
 
@@ -988,9 +987,13 @@
     const cLog = el('details', { class: 'card tight', style: 'cursor:pointer;margin-top:20px' }, [
       el('summary', { style: 'color:var(--accent);font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;justify-content:space-between' }, [
         el('span', null, ['Recent Updates (Last: Jun 4, 2026)']),
-        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.9.1'])
+        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.9.2'])
       ]),
       el('div', { style: 'margin-top:12px;font-size:12.5px;line-height:1.55;display:flex;flex-direction:column;gap:8px' }, [
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.9.2 · Jun 4, 2026']),
+          'Removed the dotted moving average trend lines from the E1RM trend chart.'
+        ]),
         el('div', { style: 'color:var(--text-dim)' }, [
           el('strong', { style: 'color:var(--text);display:block' }, ['v1.9.1 · Jun 4, 2026']),
           'Smoothed E1RM trend chart moving average lines using cubic Bezier curves.'
