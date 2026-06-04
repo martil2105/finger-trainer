@@ -635,6 +635,19 @@
 
   function lineChart(series, unit, opts) {
     opts = opts || {};
+    // Group and aggregate points by date to avoid duplicate entries on the same date
+    const cleanSeries = series.map(s => {
+      const grouped = {};
+      s.pts.forEach(p => {
+        if (grouped[p.x] === undefined || p.y > grouped[p.x]) {
+          grouped[p.x] = p.y;
+        }
+      });
+      const cleanPts = Object.keys(grouped).sort().map(x => ({ x, y: grouped[x] }));
+      return Object.assign({}, s, { pts: cleanPts });
+    });
+    series = cleanSeries;
+
     const W = 600, H = 280, padL = 42, padR = 14, padT = 14, padB = 40;
     const all = series.flatMap(s => s.pts);
     const dates = Array.from(new Set(all.map(p => p.x))).sort();
