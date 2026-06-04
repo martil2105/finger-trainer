@@ -508,12 +508,13 @@
       const card = el('div', { class: 'card' });
       card.appendChild(el('div', { class: 'legend' }, [
         el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s E1RM']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s E1RM'])
+        el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s E1RM']),
+        el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px solid rgba(154, 154, 168, 0.5);height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), 'Trend'])
       ]));
       card.appendChild(lineChart([
         { pts: s5, color: '#4f8ef7', name: '5s' },
         { pts: s3, color: '#ff6b6b', name: '3s' }
-      ], 'kg', { movingAvg: false, prMarkers: true }));
+      ], 'kg', { movingAvg: true, prMarkers: true }));
       view.appendChild(card);
     }
 
@@ -677,7 +678,7 @@
             d += ` C ${cpX} ${prev.y}, ${cpX} ${p.y}, ${p.x} ${p.y}`;
           }
         });
-        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#9a9aa8', 'stroke-width': 1.5, 'stroke-dasharray': '4 4', opacity: 0.7 }));
+        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#9a9aa8', 'stroke-width': 1.2, opacity: 0.4 }));
       }
       let d = '';
       s.pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(p.y); });
@@ -987,9 +988,13 @@
     const cLog = el('details', { class: 'card tight', style: 'cursor:pointer;margin-top:20px' }, [
       el('summary', { style: 'color:var(--accent);font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;justify-content:space-between' }, [
         el('span', null, ['Recent Updates (Last: Jun 4, 2026)']),
-        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.9.2'])
+        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.9.3'])
       ]),
       el('div', { style: 'margin-top:12px;font-size:12.5px;line-height:1.55;display:flex;flex-direction:column;gap:8px' }, [
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.9.3 · Jun 4, 2026']),
+          'Restored moving average trend lines as thin, solid, semi-transparent curves (getting rid of the dotted/dashed look).'
+        ]),
         el('div', { style: 'color:var(--text-dim)' }, [
           el('strong', { style: 'color:var(--text);display:block' }, ['v1.9.2 · Jun 4, 2026']),
           'Removed the dotted moving average trend lines from the E1RM trend chart.'
