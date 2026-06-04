@@ -75,10 +75,26 @@ button { font-family: inherit; color: var(--text); }
 .field { margin: 14px 0; }
 .field label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
 .field input, .field select, .field textarea {
-  width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border);
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--card-border);
   color: var(--text); border-radius: 10px; padding: 11px 12px; font-size: 16px; font-family: inherit;
 }
 .field textarea { min-height: 64px; resize: vertical; }
+
+/* Prevent native date inputs from overflowing or collapsing on iOS Safari */
+input[type="date"] {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 46px;
+}
+input[type="date"]::-webkit-date-and-time-value {
+  min-height: 1.4em;
+}
 .rate { display: flex; gap: 8px; flex-wrap: wrap; }
 .rate button { flex: 1; min-width: 44px; min-height: 48px; border-radius: 10px;
                background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); font-size: 17px; }

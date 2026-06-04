@@ -851,7 +851,22 @@
     const allWM = (await DB.getAll('workingMaxes')).sort((a, b) => a.date < b.date ? 1 : -1);
     if (allWM.length) {
       const c = el('div', { class: 'card' }, [el('h2', { style: 'margin-top:0' }, ['WM history'])]);
-      allWM.forEach(w => c.appendChild(el('p', { class: 'muted' }, [`${w.durationSeconds}s · ${w.valueKg} kg · ${fmtDate(w.date)} · ${w.source}`])));
+      allWM.forEach(w => {
+        const item = el('div', { class: 'row', style: 'margin:8px 0' }, [
+          el('span', { class: 'muted' }, [`${w.durationSeconds}s · ${w.valueKg} kg · ${fmtDate(w.date)} · ${w.source}`]),
+          el('button', {
+            class: 'btn small ghost',
+            style: 'margin:0;padding:2px 8px;min-height:28px;font-size:12px;border-radius:6px;width:auto;',
+            onclick: () => {
+              App.confirm(`Delete this ${w.durationSeconds}s WM history entry (${w.valueKg} kg on ${fmtDate(w.date)})?`, 'Delete', async () => {
+                await DB.del('workingMaxes', w.id);
+                App.render();
+              });
+            }
+          }, ['✕'])
+        ]);
+        c.appendChild(item);
+      });
       view.appendChild(c);
     }
 
@@ -965,10 +980,14 @@
     // Update Log
     const cLog = el('details', { class: 'card tight', style: 'cursor:pointer;margin-top:20px' }, [
       el('summary', { style: 'color:var(--accent);font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;justify-content:space-between' }, [
-        el('span', null, ['Recent Updates (Last: Jun 3, 2026)']),
-        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.8.0'])
+        el('span', null, ['Recent Updates (Last: Jun 4, 2026)']),
+        el('span', { class: 'pill accent', style: 'margin:0' }, ['v1.9.0'])
       ]),
       el('div', { style: 'margin-top:12px;font-size:12.5px;line-height:1.55;display:flex;flex-direction:column;gap:8px' }, [
+        el('div', { style: 'color:var(--text-dim)' }, [
+          el('strong', { style: 'color:var(--text);display:block' }, ['v1.9.0 · Jun 4, 2026']),
+          'Fixed iOS Safari date input layout overflow / collapsing bugs, and added delete buttons to settings Working Max (WM) history entries.'
+        ]),
         el('div', { style: 'color:var(--text-dim)' }, [
           el('strong', { style: 'color:var(--text);display:block' }, ['v1.8.0 · Jun 3, 2026']),
           'Upgraded analytics summary cards, switched E1RM trend line to standard 3-point simple moving average, and added ⭐ PR emoji markers on new personal records.'
