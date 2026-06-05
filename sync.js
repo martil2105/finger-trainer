@@ -21,6 +21,7 @@
       workingMaxes: mergeByUID(local.workingMaxes || [], remote.workingMaxes || []),
       cycles: mergeByUID(local.cycles || [], remote.cycles || []),
       benchmarks: mergeByUID(local.benchmarks || [], remote.benchmarks || []),
+      tombstones: mergeByUID(local.tombstones || [], remote.tombstones || []),
       meta: mergeMeta(local.meta || [], remote.meta || [])
     };
   }
@@ -120,6 +121,9 @@
       // 2b. Collapse logically-identical rows that carry different ids
       // (old seed history, cross-device copies) so they don't accumulate.
       mergedData = DB.dedupeDatabase(mergedData);
+      // 2c. Apply tombstones: drop records anyone has deleted so they don't
+      // resurrect, while keeping the tombstones in the payload for peers.
+      mergedData = DB.applyTombstones(mergedData);
 
       if (remoteData) {
         status('Applying merged database locally...');

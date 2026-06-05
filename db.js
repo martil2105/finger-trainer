@@ -5,7 +5,7 @@
   'use strict';
 
   const DB_NAME = 'fingerTrainer';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2; // v2 adds the tombstones store (soft-delete sync)
   let _db = null;
 
   function open() {
@@ -33,6 +33,11 @@
         if (!db.objectStoreNames.contains('meta')) {
           db.createObjectStore('meta', { keyPath: 'key' });
         }
+        // Tombstones: one record per deleted item so deletions propagate
+        // through Gist sync instead of the item resurrecting from a peer.
+        if (!db.objectStoreNames.contains('tombstones')) {
+          db.createObjectStore('tombstones', { keyPath: 'id' });
+        }
       };
       req.onsuccess = () => { _db = req.result; resolve(_db); };
       req.onerror = () => reject(req.error);
@@ -56,6 +61,36 @@
   function getMeta(key) { return get('meta', key).then(r => r ? r.value : undefined); }
   function setMeta(key, value) { return put('meta', { key, value }); }
 
+  // ---- soft delete ------------------------------------------------------
+  // Records a tombstone AND removes the record. The tombstone travels through
+  // Gist sync so other devices delete their copy too (a plain delete would be
+  // undone on the next merge, since merge only ever adds by id).
+  function softDelete(store, id) {
+    return Promise.all([
+      put('tombstones', { id: id, store: store, deletedAt: new Date().toISOString() }),
+      del(store, id)
+    ]);
+  }
+  // Strip tombstoned records out of an in-memory backup object (keeps the
+  // tombstones themselves so peers still learn about the deletion).
+  function applyTombstones(data) {
+    const tombs = data.tombstones || [];
+    const byStore = {};
+    tombs.forEach(t => { (byStore[t.store] = byStore[t.store] || new Set()).add(t.id); });
+    const strip = (arr, store) => {
+      const dead = byStore[store];
+      return dead ? (arr || []).filter(x => !dead.has(x.id)) : (arr || []);
+    };
+    return {
+      logEntries: strip(data.logEntries, 'logEntries'),
+      workingMaxes: strip(data.workingMaxes, 'workingMaxes'),
+      cycles: strip(data.cycles, 'cycles'),
+      benchmarks: strip(data.benchmarks, 'benchmarks'),
+      tombstones: tombs,
+      meta: data.meta || []
+    };
+  }
+
   // ---- domain helpers ---------------------------------------------------
   // Current WM for a duration = latest-dated entry for that duration.
   function currentWM(durationSeconds) {
@@ -71,7 +106,26 @@
       Array.from(new Set(all.map(w => w.durationSeconds))));
   }
   function activeCycle() {
-    return getAll('cycles').then(all => all.find(c => c.status === 'active') || null);
+    return getAll('cycles').then(all => {
+      if (!all.length) return null;
+      const active = all.find(c => c.status === 'active');
+      if (active) return active;
+      // Self-heal (READ-ONLY — no writes, so it can't ping-pong across synced
+      // devices): no cycle is flagged active, which can happen when a sync
+      // merge or a delete strands the data. Fall back so Today still works,
+      // preferring a cycle whose date range contains today, else the most
+      // recently started one. The user can make it official via "Activate".
+      let todayIso;
+      try {
+        const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+        todayIso = d.toISOString().slice(0, 10);
+      } catch (e) { todayIso = new Date().toISOString().slice(0, 10); }
+      const containsToday = (typeof Calc !== 'undefined' && Calc.weekNumberFor)
+        ? all.filter(c => Calc.weekNumberFor(c, todayIso) != null) : [];
+      const pool = containsToday.length ? containsToday : all.slice();
+      pool.sort((a, b) => (a.startDate < b.startDate ? 1 : (a.startDate > b.startDate ? -1 : 0)));
+      return pool[0] || null;
+    });
   }
   function logsNewestFirst() {
     return getAll('logEntries').then(all => {
@@ -132,8 +186,18 @@
     // re-saving/editing a Test logs a fresh benchmark; collapse identical ones
     return ['bench', b.date, b.durationSeconds, b.maxLoadKg, b.rpe].join('|');
   }
+  function statusRank(x) {
+    return (x && x.status === 'active') ? 0 : (x && x.status === 'draft') ? 1 : 2;
+  }
   function preferred(a, b) {
     // Deterministic winner so every device converges on the same row.
+    // For records that carry a status (cycles), an active copy must beat an
+    // archived/draft copy — otherwise collapsing duplicate cycles could drop
+    // the active one and leave Today with "No active cycle".
+    if (a.status !== undefined && b.status !== undefined) {
+      const ra = statusRank(a), rb = statusRank(b);
+      if (ra !== rb) return ra < rb ? a : b;
+    }
     // Stable 'seed_*' ids beat random ones; otherwise smallest id wins.
     const aSeed = String(a.id).startsWith('seed_');
     const bSeed = String(b.id).startsWith('seed_');
@@ -156,6 +220,7 @@
       workingMaxes: dedupeByKey(data.workingMaxes || [], wmKey),
       cycles: dedupeByKey(data.cycles || [], cycleKey),
       benchmarks: dedupeByKey(data.benchmarks || [], benchKey),
+      tombstones: data.tombstones || [], // passed through, applied separately
       meta: data.meta || []
     };
   }
@@ -182,10 +247,11 @@
       getAll('workingMaxes'),
       getAll('cycles'),
       getAll('benchmarks'),
+      getAll('tombstones'),
       getAll('meta')
-    ]).then(([logs, wms, cycles, benchmarks, meta]) => {
+    ]).then(([logs, wms, cycles, benchmarks, tombstones, meta]) => {
       const cleanMeta = meta.filter(m => m.key !== 'githubToken' && m.key !== 'githubGistId');
-      return { logEntries: logs, workingMaxes: wms, cycles, benchmarks, meta: cleanMeta };
+      return { logEntries: logs, workingMaxes: wms, cycles, benchmarks, tombstones, meta: cleanMeta };
     });
   }
 
@@ -211,13 +277,21 @@
         }
       });
     }
-    return Promise.all(ops);
+    if (data.tombstones) {
+      data.tombstones.forEach(t => ops.push(put('tombstones', t)));
+    }
+    return Promise.all(ops).then(() => {
+      // Second phase (after all puts settle): honour incoming deletions by
+      // removing any locally-present record that a peer has tombstoned.
+      const dels = (data.tombstones || []).map(t => del(t.store, t.id));
+      return Promise.all(dels);
+    });
   }
 
   function resetAll() {
     return Promise.all([
       clear('workingMaxes'), clear('cycles'), clear('logEntries'),
-      clear('benchmarks'), clear('meta')
+      clear('benchmarks'), clear('tombstones'), clear('meta')
     ]);
   }
 
@@ -225,6 +299,6 @@
     open, put, del, getAll, get, clear, getMeta, setMeta,
     currentWM, wmDurationsOnFile, activeCycle, logsNewestFirst, addLog,
     seedIfEmpty, resetAll, exportBackup, importBackup,
-    dedupe, dedupeDatabase
+    dedupe, dedupeDatabase, softDelete, applyTombstones
   };
 })(typeof self !== 'undefined' ? self : this);

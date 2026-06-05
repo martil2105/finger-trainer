@@ -66,7 +66,7 @@
   async function setStatus(c, s) { c.status = s; await DB.put('cycles', c); App.render(); }
   async function delCycle(c) {
     App.confirm(`Delete cycle "${c.name}"? Log entries are kept (they key on date).`, 'Delete', async () => {
-      await DB.del('cycles', c.id); App.render();
+      await DB.softDelete('cycles', c.id); App.render();
     });
   }
 

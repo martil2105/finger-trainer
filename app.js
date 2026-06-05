@@ -202,6 +202,16 @@
       view.appendChild(el('div', { class: 'card' }, ['No active cycle. Go to Program to activate one.']));
       return;
     }
+    // If we're showing a cycle that isn't actually flagged active (read-time
+    // self-heal kicked in), offer a one-tap fix to make it official.
+    if (cycle.status !== 'active') {
+      const banner = el('div', { class: 'banner warn' }, [
+        `Showing "${cycle.name}", but no cycle is marked active on this device. `,
+        el('button', { class: 'btn small', style: 'margin:8px 0 0', onclick: () => Builder.activate(cycle) }, ['Set as active cycle'])
+      ]);
+      view.appendChild(banner);
+    }
+
     const weeks = App.getWeeks(cycle, wmFor);
     const plan = App.buildPlan(cycle, weeks, todayISO(), wmFor);
 
@@ -924,7 +934,7 @@
             style: 'margin:0;padding:2px 8px;min-height:28px;font-size:12px;border-radius:6px;width:auto;',
             onclick: () => {
               App.confirm(`Delete this ${w.durationSeconds}s WM history entry (${w.valueKg} kg on ${fmtDate(w.date)})?`, 'Delete', async () => {
-                await DB.del('workingMaxes', w.id);
+                await DB.softDelete('workingMaxes', w.id);
                 App.render();
               });
             }
@@ -1219,7 +1229,7 @@
     } }, [existing ? 'Save changes' : 'Save session']));
 
     if (existing) body.push(el('button', { class: 'btn danger', style: 'margin-top:8px', onclick: async () => {
-      App.confirm('Delete this entry?', 'Delete', async () => { await DB.del('logEntries', e.id); App.closeSheet(); App.render(); });
+      App.confirm('Delete this entry?', 'Delete', async () => { await DB.softDelete('logEntries', e.id); App.closeSheet(); App.render(); });
     } }, ['Delete']));
 
     App.sheet(existing ? 'Edit session' : 'Log session', body);
