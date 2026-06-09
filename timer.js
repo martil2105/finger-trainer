@@ -246,7 +246,7 @@
 
     if (!isOI) {
       const loadSt = App.stepper({ min: 0, max: 80, step: 0.5, value: R.curLoad != null ? R.curLoad : 25, fmt: v => v + ' kg', onChange: v => R.curLoad = v });
-      const rpeSt = App.stepper({ min: 6, max: 10, step: 0.5, value: R.curRPE, fmt: v => '@' + v, onChange: v => R.curRPE = v });
+      const rpeSt = App.stepper({ min: 5, max: 10, step: 0.5, value: R.curRPE, fmt: v => '@' + v, onChange: v => R.curRPE = v });
       const grid = document.createElement('div'); grid.className = 'grid2';
       const f1 = document.createElement('div'); f1.className = 'field'; f1.innerHTML = '<label>Load</label>'; f1.appendChild(loadSt);
       const f2 = document.createElement('div'); f2.className = 'field'; f2.innerHTML = '<label>RPE</label>'; f2.appendChild(rpeSt);

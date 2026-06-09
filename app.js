@@ -1180,7 +1180,7 @@
 
     // load + rpe steppers
     const loadSt = stepper({ min: 0, max: 80, step: 0.5, value: state.load || 0, fmt: v => v + ' kg', onChange: v => { state.load = v; updE1RM(); } });
-    const rpeSt = stepper({ min: 6, max: 10, step: 0.5, value: state.rpe || 8, fmt: v => '@' + v, onChange: v => { state.rpe = v; updE1RM(); } });
+    const rpeSt = stepper({ min: 5, max: 10, step: 0.5, value: state.rpe || 8, fmt: v => '@' + v, onChange: v => { state.rpe = v; updE1RM(); } });
     const setsSt = stepper({ min: 0, max: 10, step: 1, value: state.sets || 3, onChange: v => state.sets = v });
     body.push(el('div', { class: 'grid2' }, [
       el('div', { class: 'field' }, [el('label', null, ['Top set load']), loadSt]),
