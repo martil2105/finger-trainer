@@ -15,11 +15,14 @@
   function avg(arr) { return arr.reduce((s, v) => s + v, 0) / arr.length; }
 
   // ---- 6.1 E1RM ---------------------------------------------------------
-  // Only meaningful for Yielding roles with RPE >= 6.
+  // Computed for Yielding roles down to RPE 5 (matches the logging floor).
+  // The %1RM model is linear — %1RM = 40 + 6*RPE — so it extends fine; just
+  // note estimates below ~@6 are rougher (more in reserve = noisier back-calc),
+  // which is acceptable here since E1RM is used to track the trend over time.
   // hangDuration: 3s hangs yield ~10% higher loads at the same RPE — divide by 1.1
   // to normalise to a 5s-equivalent so the E1RM trend stays on one comparable scale.
   function e1rm(loadKg, rpe, hangDuration) {
-    if (loadKg == null || rpe == null || rpe < 6) return null;
+    if (loadKg == null || rpe == null || rpe < 5) return null;
     const raw = roundTo(loadKg * 100 / (40 + 6 * rpe), 1);
     return hangDuration === 3 ? roundTo(raw / 1.1, 1) : raw;
   }
