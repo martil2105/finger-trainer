@@ -46,6 +46,46 @@
     };
   }
 
+  // ---- Template D: "4-Week Top-Set Block (3s)" --------------------------
+  // Maximal-neural top-set block. Two 2-week sub-blocks: RPE ceiling 9 for
+  // weeks 1-2, then 9.5 for weeks 3-4. Back-off RPE 8 throughout at ~85-88%
+  // of today's top set. Weighted hangs Thu AND Saturday (structurally
+  // identical), OI primer Tuesday. Load is never prescribed — only the RPE
+  // target is fixed; the anchor (~32.5kg fresh 3s max) is a reference, and
+  // load emerges from autoregulation. 3s hangs on a 20mm half-crimp.
+  function mondayOfThisWeek() {
+    const d = new Date();
+    const day = (d.getDay() + 6) % 7;      // Mon = 0
+    d.setDate(d.getDate() - day);
+    return d.toISOString().slice(0, 10);
+  }
+  function templateD() {
+    // back-off % = 0.865 (midpoint of the 85-88% window the program calls for)
+    const b1 = block('Top-Set Block · Wk 1–2', 'TopSet', 2, 3, 'topSetPlusBackoffs', 9.0, 9.0, 4, 4, 0.865, 3, 0.85, 0.85, 0, '3-5');
+    const b2 = block('Top-Set Block · Wk 3–4', 'TopSet', 2, 3, 'topSetPlusBackoffs', 9.5, 9.5, 4, 4, 0.865, 3, 0.85, 0.85, 0, '3-5');
+    const warm = [
+      { load: 15,   rpe: '5–6' },
+      { load: 22.5, rpe: '6–7' },
+      { load: 27.5, rpe: '7–8' }
+    ];
+    b1.heavy.warmup = warm.map(w => Object.assign({}, w));
+    b2.heavy.warmup = warm.map(w => Object.assign({}, w));
+    return {
+      id: uid(),
+      name: '4-Week Top-Set Block (3s)',
+      status: 'active',
+      startDate: mondayOfThisWeek(),
+      weeklyStructure: { mon: 'Rest', tue: 'OIprimer', wed: 'Rest', thu: 'Heavy', fri: 'Rest', sat: 'Heavy', sun: 'Rest' },
+      notes: 'Maximal-neural finger block. 67kg BW · 20mm half-crimp · 3s hangs · ref fresh 3s max 32.5kg. ' +
+             'RPE is the ONLY fixed variable — load is never prescribed, let it find itself. Top-set RPE ceiling: 9 (Wk1-2) → 9.5 (Wk3-4). ' +
+             'Back-offs @8 at 85-88% of today\'s top, fatigue-stop governs the count (3-5 good day / 1-2 fatigued — both correct). ' +
+             'Fixed warm-up ladder before every top set: +15kg@5-6, +22.5kg@6-7, +27.5kg@7-8 (2-3 min rest, prime not fatigue). ' +
+             'Readiness check at +27.5kg: 8+ → reduce top-set expectation · 9+ or joint pain → warm-up only, then climb. ' +
+             'Weighted hangs always BEFORE climbing on Thu & Sat. E1RM is the primary metric — treat this block\'s first session as the new baseline (3s ≠ prior 5s values).',
+      blocks: [ b1, b2 ]
+    };
+  }
+
   // ---- Template C: blank — one Custom block at defaults (§12C) ----------
   function templateC() {
     return {
@@ -121,6 +161,6 @@
     };
   }
 
-  root.Templates = { uid, templateA, templateB, templateC, block, deload, SEED_LOG };
+  root.Templates = { uid, templateA, templateB, templateC, templateD, block, deload, SEED_LOG };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Templates;
 })(typeof self !== 'undefined' ? self : this);

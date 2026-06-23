@@ -146,7 +146,7 @@
       return { rest: false, role: 'Heavy', week: wk, blockName: week.blockName,
         duration: week.heavyDuration, rpe: week.heavyRPE, protocol: week.heavyProtocol,
         sets: week.heavySets, anchor: week.heavyAnchorKg, backoffAnchor: week.backoffAnchorKg,
-        isLastBlockWeek, wmMissing: week.wmMissing };
+        warmup: week.warmup, isLastBlockWeek, wmMissing: week.wmMissing };
     }
     if (structRole === 'Volume') {
       return { rest: false, role: 'Volume', week: wk, blockName: week.blockName,
@@ -346,6 +346,14 @@
       c.appendChild(el('div', { class: 'banner danger' }, [`No ${plan.duration}s Working Max on file — set a benchmark for a correct anchor.`]));
     }
 
+    // Fixed warm-up ladder (shown when the program defines one)
+    if (plan.warmup && plan.warmup.length) {
+      const ladder = plan.warmup.map((s, i) => `Set ${i + 1}: +${s.load}kg @${s.rpe}`).join('  ·  ');
+      c.appendChild(el('div', { class: 'callout' }, [`Warm-up ladder (fixed · ${plan.duration}s · 2–3 min rest): ${ladder}. Prime the flexors, don't fatigue.`]));
+      const last = plan.warmup[plan.warmup.length - 1];
+      c.appendChild(el('p', { class: 'muted' }, [`Readiness check at +${last.load}kg: feels @8+ → reduce top-set expectation · @9+ or any joint discomfort → warm-up only, then go climb.`]));
+    }
+
     // RPE-leads callout / autoregulation guidance
     if (plan.protocol === 'maxSingles' && plan.role === 'Heavy') {
       // Peak block: 3s max singles — specific autoregulation rules from program
@@ -363,7 +371,7 @@
         `Find today's top set — RPE leads (target @${plan.rpe}). WM anchor: ~${plan.anchor} kg. Load up/down freely. Back-offs: ${plan.sets} sets at genuinely @7–8 (~${plan.anchor - plan.backoffAnchor} kg lighter than top).`
       ]));
       c.appendChild(el('p', { class: 'muted' }, [
-        `Fatigue stop: halt back-offs if (1) can't hold full 5s at back-off load, (2) load must drop >5% to stay @8, (3) grip breaks before second 4, (4) any joint discomfort.`
+        `Fatigue stop: halt back-offs if (1) can't hold full ${plan.duration}s at back-off load, (2) load must drop >5% to stay @8, (3) grip breaks before second ${Math.max(2, (plan.duration || 5) - 1)}, (4) any joint discomfort.`
       ]));
     } else if (plan.role === 'Test') {
       c.appendChild(el('div', { class: 'callout' }, [
@@ -413,10 +421,11 @@
     const weeks = App.getWeeks(cycle, wmFor);
     const curWk = Calc.weekNumberFor(cycle, todayISO());
     const bandColor = { Transmutation: '#4f8ef7', Peak: '#ff6b6b', Accumulation: '#4ecb71',
-                        Realization: '#b07bff', DeloadTest: '#f7b955', Custom: '#9a9aa8' };
+                        Realization: '#b07bff', DeloadTest: '#f7b955', TopSet: '#4f8ef7', Custom: '#9a9aa8' };
+    const hasVolumeDay = Object.values(cycle.weeklyStructure || {}).includes('Volume');
     weeks.forEach(w => {
       const node = el('button', { class: 'tl-week list-item' + (w.weekNumber === curWk ? ' now' : ''),
-        onclick: () => showWeekDetail(w) });
+        onclick: () => showWeekDetail(w, cycle) });
       node.classList.remove('list-item');
       node.appendChild(el('div', { class: 'row' }, [
         el('span', { class: 'wk' }, [`W${w.weekNumber} · ${w.blockName}`]),
@@ -425,13 +434,15 @@
       ]));
       const line = w.isDeloadTest
         ? `Deload @6 + test ${w.testDurations.join('/')}s · anchor ~${kg(w.deloadAnchorKg)}`
-        : `Heavy ${w.heavyDuration}s @${w.heavyRPE} ~${kg(w.heavyAnchorKg)} · Vol ${Math.round((w.volumePct || 0) * 100)}% ~${kg(w.volumeAnchorKg)}`;
+        : hasVolumeDay
+          ? `Heavy ${w.heavyDuration}s @${w.heavyRPE} ~${kg(w.heavyAnchorKg)} · Vol ${Math.round((w.volumePct || 0) * 100)}% ~${kg(w.volumeAnchorKg)}`
+          : `Top set ${w.heavyDuration}s @${w.heavyRPE} ~${kg(w.heavyAnchorKg)} · ${w.heavySets} back-offs ~${kg(w.backoffAnchorKg)} (Thu & Sat)`;
       node.appendChild(el('p', { class: 'muted', style: 'margin:6px 0 0' }, [line]));
       view.appendChild(node);
     });
   }
 
-  function showWeekDetail(w) {
+  function showWeekDetail(w, cycle) {
     const body = [];
     body.push(el('p', { class: 'sub' }, [`${w.blockName} · ${fmtDate(w.startDate)}`]));
     if (w.isDeloadTest) {
@@ -466,48 +477,57 @@
         el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.testDurations.join('/')}s max hangs @9–9.5 · Find today's absolute max load`])
       ]));
     } else {
-      // Heavy hangs (Sat)
-      const heavyPlan = {
-        rest: false, role: 'Heavy', week: w.weekNumber, blockName: w.blockName,
-        duration: w.heavyDuration, rpe: w.heavyRPE, protocol: w.heavyProtocol,
-        sets: w.heavySets, anchor: w.heavyAnchorKg, backoffAnchor: w.backoffAnchorKg,
-        isLastBlockWeek: false, wmMissing: w.wmMissing
-      };
-      body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(heavyPlan); } }, [
-        el('div', { class: 'row' }, [
-          el('strong', null, ['Heavy Hangs (Sat)']),
-          el('span', { class: 'pill accent' }, ['Start →'])
-        ]),
-        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.heavyDuration}s · @${w.heavyRPE} · anchor ~${kg(w.heavyAnchorKg)} · ${w.heavyProtocol === 'maxSingles' ? w.heavySets + ' max singles' : w.heavySets + ' back-offs ~' + kg(w.backoffAnchorKg)}`])
-      ]));
+      // Render one button per scheduled session day, driven by weeklyStructure
+      // so programs with two heavy days (and no volume day) render correctly.
+      const dayLabel = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+      const order = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+      const ws = (cycle && cycle.weeklyStructure) || { thu: 'Volume', sat: 'Heavy', tue: 'OIprimer' };
 
-      // Volume hangs (Thu)
-      const volumePlan = {
-        rest: false, role: 'Volume', week: w.weekNumber, blockName: w.blockName,
-        duration: w.volumeDuration, rpe: '7–8', protocol: 'fixedVolume',
-        sets: w.volumeSets, anchor: w.volumeAnchorKg, pct: w.volumePct
-      };
-      body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(volumePlan); } }, [
-        el('div', { class: 'row' }, [
-          el('strong', null, ['Volume Hangs (Thu)']),
-          el('span', { class: 'pill accent' }, ['Start →'])
-        ]),
-        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.volumeDuration}s · ${Math.round((w.volumePct || 0) * 100)}% of heavy · anchor ~${kg(w.volumeAnchorKg)} · ${w.volumeSets} sets`])
-      ]));
-
-      // OI primer (Tue)
-      const oiPlan = {
-        rest: false, role: 'OIprimer', week: w.weekNumber, blockName: w.blockName,
-        duration: null, rpe: null, protocol: 'oi', sets: w.oiSets === 3 ? '3-5' : w.oiSets, anchor: null,
-        note: 'Overcoming isometrics — max-intent press/pull against a fixed surface, ~5s. Neural primer, then limit board.'
-      };
-      body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(oiPlan); } }, [
-        el('div', { class: 'row' }, [
-          el('strong', null, ['OI primer + Board (Tue)']),
-          el('span', { class: 'pill accent' }, ['Start →'])
-        ]),
-        el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.oiSets === 3 ? '3-5' : w.oiSets} sets overcoming isometrics + limit board bouldering`])
-      ]));
+      order.forEach(d => {
+        const role = ws[d];
+        const dl = dayLabel[d];
+        if (role === 'Heavy') {
+          const heavyPlan = {
+            rest: false, role: 'Heavy', week: w.weekNumber, blockName: w.blockName,
+            duration: w.heavyDuration, rpe: w.heavyRPE, protocol: w.heavyProtocol,
+            sets: w.heavySets, anchor: w.heavyAnchorKg, backoffAnchor: w.backoffAnchorKg,
+            warmup: w.warmup, isLastBlockWeek: false, wmMissing: w.wmMissing
+          };
+          body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(heavyPlan); } }, [
+            el('div', { class: 'row' }, [
+              el('strong', null, [`${w.warmup ? 'Top-Set Hangs' : 'Heavy Hangs'} (${dl})`]),
+              el('span', { class: 'pill accent' }, ['Start →'])
+            ]),
+            el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.heavyDuration}s · @${w.heavyRPE} · anchor ~${kg(w.heavyAnchorKg)} · ${w.heavyProtocol === 'maxSingles' ? w.heavySets + ' max singles' : w.heavySets + ' back-offs ~' + kg(w.backoffAnchorKg)}`])
+          ]));
+        } else if (role === 'Volume') {
+          const volumePlan = {
+            rest: false, role: 'Volume', week: w.weekNumber, blockName: w.blockName,
+            duration: w.volumeDuration, rpe: '7–8', protocol: 'fixedVolume',
+            sets: w.volumeSets, anchor: w.volumeAnchorKg, pct: w.volumePct
+          };
+          body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(volumePlan); } }, [
+            el('div', { class: 'row' }, [
+              el('strong', null, [`Volume Hangs (${dl})`]),
+              el('span', { class: 'pill accent' }, ['Start →'])
+            ]),
+            el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.volumeDuration}s · ${Math.round((w.volumePct || 0) * 100)}% of heavy · anchor ~${kg(w.volumeAnchorKg)} · ${w.volumeSets} sets`])
+          ]));
+        } else if (role === 'OIprimer') {
+          const oiPlan = {
+            rest: false, role: 'OIprimer', week: w.weekNumber, blockName: w.blockName,
+            duration: null, rpe: null, protocol: 'oi', sets: w.oiSets === 3 ? '3-5' : w.oiSets, anchor: null,
+            note: 'Overcoming isometrics — max-intent press/pull against a fixed surface, ~5s. Neural primer, then limit board.'
+          };
+          body.push(el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(oiPlan); } }, [
+            el('div', { class: 'row' }, [
+              el('strong', null, [`OI primer + Board (${dl})`]),
+              el('span', { class: 'pill accent' }, ['Start →'])
+            ]),
+            el('p', { class: 'muted', style: 'margin:4px 0 0' }, [`${w.oiSets === 3 ? '3-5' : w.oiSets} sets overcoming isometrics + limit board bouldering`])
+          ]));
+        }
+      });
     }
     App.sheet(`Week ${w.weekNumber}`, body);
   }

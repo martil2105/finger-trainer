@@ -27,8 +27,11 @@
     view.appendChild(el('div', { class: 'card' }, [
       el('strong', null, ['New cycle from template']),
       el('div', { class: 'spacer' }),
+      el('button', { class: 'btn', style: 'margin:4px 0 8px', onclick: () => startTopSetBlock() }, ['★ Start 4-Week Top-Set Block (3s)']),
+      el('p', { class: 'muted', style: 'margin:0 0 8px' }, ['Activates now and archives your current cycle. All logs are kept.']),
       el('button', { class: 'btn small secondary', style: 'margin:4px 6px 0 0', onclick: () => newFrom('A') }, ['Current (Trans→Peak)']),
       el('button', { class: 'btn small secondary', style: 'margin:4px 6px 0 0', onclick: () => newFrom('B') }, ['Descending 7→5→3']),
+      el('button', { class: 'btn small secondary', style: 'margin:4px 6px 0 0', onclick: () => newFrom('D') }, ['Top-Set Block (draft)']),
       el('button', { class: 'btn small secondary', style: 'margin:4px 0 0', onclick: () => newFrom('C') }, ['Blank'])
     ]));
 
@@ -52,10 +55,29 @@
   };
 
   async function newFrom(which) {
-    const c = which === 'A' ? Templates.templateA() : which === 'B' ? Templates.templateB() : Templates.templateC();
+    const c = which === 'A' ? Templates.templateA()
+            : which === 'B' ? Templates.templateB()
+            : which === 'D' ? Templates.templateD()
+            : Templates.templateC();
     c.status = 'draft';
     await DB.put('cycles', c);
     Builder.openCycleEditor(c);
+  }
+
+  // One-tap: create the 4-Week Top-Set Block, ensure a 3s Working Max anchor
+  // exists, and activate it (archiving any current cycle — logs are untouched).
+  async function startTopSetBlock() {
+    const c = Templates.templateD();
+    const wm3 = await DB.currentWM(3);
+    if (!wm3) {
+      await DB.put('workingMaxes', {
+        id: Templates.uid(), durationSeconds: 3, valueKg: 32.5,
+        date: new Date().toISOString().slice(0, 10), source: 'seed',
+        notes: 'Estimated fresh 3s max — anchor for 4-Week Top-Set Block. Edit in Settings if yours differs.'
+      });
+    }
+    await DB.put('cycles', c);
+    await activate(c);
   }
   async function cloneCycle(c) {
     const copy = JSON.parse(JSON.stringify(c));

@@ -107,6 +107,7 @@
           : null;
         wk.volumeSets = block.volume ? block.volume.sets : 0;
         wk.oiSets = (block.oi && block.oi.sets !== undefined) ? block.oi.sets : '3-5';
+        wk.warmup = (block.heavy && block.heavy.warmup) ? block.heavy.warmup : null;
       }
       weeks.push(wk);
     }
