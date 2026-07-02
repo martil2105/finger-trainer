@@ -551,7 +551,7 @@
 
     const combined5sEq = yielding.filter(l => l.hangDurationSeconds === 5 || l.hangDurationSeconds === 3)
       .map(l => ({ x: l.date, y: l.e1rmKg, is3s: l.hangDurationSeconds === 3 }));
-    combined5sEq.forEach((p, i) => { if (i > 0 && p.is3s) p.dashedPrev = true; });
+    combined5sEq.forEach((p, i) => { p.dashedPrev = (i > 0 && p.is3s); });
 
     const bw = await DB.getMeta('bodyweightKg');
     const best5 = s5all.length ? Math.max.apply(null, s5all.map(p => p.y)) : null;
@@ -782,13 +782,16 @@
         // Support per-segment dashes by breaking into multiple paths
         let currentPath = [];
         let isDashed = false;
+        if (s.pts.length > 0) isDashed = !!s.pts[0].dashedPrev;
         
         const flushPath = () => {
           if (currentPath.length < 2) return;
           let d = '';
           currentPath.forEach((pt, i) => { d += (i ? ' L' : 'M') + xFor(pt.x) + ' ' + yFor(pt.y); });
           const attrs = { d, fill: 'none', stroke: s.color, 'stroke-width': 2.5, 'stroke-linejoin': 'round' };
-          if (isDashed) attrs['stroke-dasharray'] = '4,4';
+          if (isDashed) {
+            attrs['stroke-dasharray'] = '5, 5';
+          }
           svg.appendChild(svgNS('path', attrs));
         };
 
@@ -796,11 +799,12 @@
           if (i === 0) {
             currentPath.push(p);
           } else {
-            if (p.dashedPrev !== isDashed) {
+            const ptDashed = !!p.dashedPrev;
+            if (ptDashed !== isDashed) {
               const prevPoint = s.pts[i - 1];
               flushPath();
               currentPath = [prevPoint];
-              isDashed = p.dashedPrev;
+              isDashed = ptDashed;
             }
             currentPath.push(p);
           }
