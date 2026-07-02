@@ -544,14 +544,21 @@
 
     // ---- summary stat cards ----
     const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: l.e1rmKg }));
+    const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: l.e1rmKg, is3s: true }));
     const s3raw = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ 
       x: l.date, 
-      y: l.topSetLoadKg != null ? Calc.e1rm(l.topSetLoadKg, l.topSetRPE, 5) : Calc.roundTo(l.e1rmKg * 1.1, 1)
+      y: l.topSetLoadKg != null ? Calc.e1rm(l.topSetLoadKg, l.topSetRPE, 5) : Calc.roundTo(l.e1rmKg * 1.1, 1),
+      is3s: true
     }));
 
-    const combined5sEq = yielding.filter(l => l.hangDurationSeconds === 5 || l.hangDurationSeconds === 3)
-      .map(l => ({ x: l.date, y: l.e1rmKg, is3s: l.hangDurationSeconds === 3 }));
-    combined5sEq.forEach((p, i) => { p.dashedPrev = (i > 0 && p.is3s); });
+    // Connect the 3s dashed line back to the last 5s point so the timeline is continuous
+    if (s3all.length > 0 && s5all.length > 0) {
+      const first3s = s3all[0];
+      const preceding5s = s5all.slice().reverse().find(p => p.x < first3s.x);
+      if (preceding5s) {
+        s3all.unshift({ x: preceding5s.x, y: preceding5s.y, is3s: false });
+      }
+    }
 
     const bw = await DB.getMeta('bodyweightKg');
     const best5 = s5all.length ? Math.max.apply(null, s5all.map(p => p.y)) : null;
@@ -570,13 +577,13 @@
 
     // E1RM chart, two series by duration
     view.appendChild(el('h2', null, ['E1RM trend']));
-    if (!combined5sEq.length) {
+    if (!s5all.length && !s3all.length) {
       view.appendChild(el('div', { class: 'card' }, ['Log Yielding sessions with load + RPE to see E1RM trends.']));
     } else {
       const card = el('div', { class: 'card' });
       card.appendChild(el('div', { class: 'legend' }, [
-        el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s-eq (Combined)']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px dashed #4f8ef7;height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), '3s segment']),
+        el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s E1RM']),
+        el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px dashed #4f8ef7;height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), '3s (5s-eq)']),
         el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s Raw']),
         el('span', null, [
           el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px solid rgba(79, 142, 247, 0.4);height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }),
@@ -585,11 +592,8 @@
         ])
       ]));
       card.appendChild(lineChart([
-        // Trend only for 5s
-        { pts: s5all, hideLine: true, hidePoints: true, trendColor: '#4f8ef7' },
-        // The combined line (no mixed trend)
-        { pts: combined5sEq, color: '#4f8ef7', name: '5s-eq', noTrend: true },
-        // 3s Raw line and its red trend
+        { pts: s5all, color: '#4f8ef7', name: '5s', trendColor: '#4f8ef7' },
+        { pts: s3all, color: '#4f8ef7', name: '3s (5s-eq)', dashed: true, noTrend: true },
         { pts: s3raw, color: '#ff6b6b', name: '3s Raw', trendColor: '#ff6b6b' }
       ], 'kg', { movingAvg: true, prMarkers: true }));
       view.appendChild(card);
@@ -777,7 +781,7 @@
       } else if (s.dashed) {
         let d = '';
         s.pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(p.y); });
-        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.5, 'stroke-dasharray': '4,4', 'stroke-linejoin': 'round' }));
+        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.5, 'stroke-dasharray': '5, 5', 'stroke-linejoin': 'round' }));
       } else {
         // Support per-segment dashes by breaking into multiple paths
         let currentPath = [];
@@ -818,6 +822,9 @@
         s.pts.forEach(p => {
           const isPR = opts.prMarkers && p.y > best;
           if (p.y > best) best = p.y;
+          
+          if (p.is3s === false) return; // skip point rendering if explicitly marked false
+
           if (isPR) {
             const starText = svgNS('text', {
               x: xFor(p.x),
