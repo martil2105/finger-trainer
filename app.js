@@ -578,11 +578,19 @@
         el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s-eq (Combined)']),
         el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px dashed #4f8ef7;height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), '3s segment']),
         el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s Raw']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px solid rgba(154, 154, 168, 0.5);height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), 'Trend'])
+        el('span', null, [
+          el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px solid rgba(79, 142, 247, 0.4);height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }),
+          el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px solid rgba(255, 107, 107, 0.4);height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }),
+          'Trends'
+        ])
       ]));
       card.appendChild(lineChart([
-        { pts: combined5sEq, color: '#4f8ef7', name: '5s-eq' },
-        { pts: s3raw, color: '#ff6b6b', name: '3s Raw' }
+        // Trend only for 5s
+        { pts: s5all, hideLine: true, hidePoints: true, trendColor: '#4f8ef7' },
+        // The combined line (no mixed trend)
+        { pts: combined5sEq, color: '#4f8ef7', name: '5s-eq', noTrend: true },
+        // 3s Raw line and its red trend
+        { pts: s3raw, color: '#ff6b6b', name: '3s Raw', trendColor: '#ff6b6b' }
       ], 'kg', { movingAvg: true, prMarkers: true }));
       view.appendChild(card);
     }
@@ -746,7 +754,7 @@
     series.forEach(s => {
       if (s.pts.length === 0) return;
       // moving average (3-pt) underlay
-      if (opts.movingAvg && s.pts.length >= 3) {
+      if (opts.movingAvg && s.pts.length >= 3 && !s.noTrend) {
         const avgPts = s.pts.map((p, i) => {
           const w = s.pts.slice(Math.max(0, i - 1), i + 2);
           return { x: xFor(p.x), y: yFor(w.reduce((a, b) => a + b.y, 0) / w.length) };
@@ -760,9 +768,13 @@
             d += ` C ${cpX} ${prev.y}, ${cpX} ${p.y}, ${p.x} ${p.y}`;
           }
         });
-        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#9a9aa8', 'stroke-width': 1.2, opacity: 0.4 }));
+        const tColor = s.trendColor || '#9a9aa8';
+        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: tColor, 'stroke-width': 1.2, opacity: 0.4 }));
       }
-      if (s.dashed) {
+      
+      if (s.hideLine) {
+        // do not draw line
+      } else if (s.dashed) {
         let d = '';
         s.pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(p.y); });
         svg.appendChild(svgNS('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.5, 'stroke-dasharray': '4,4', 'stroke-linejoin': 'round' }));
@@ -796,37 +808,39 @@
         flushPath();
       }
 
-      // PR markers + points
-      let best = -Infinity;
-      s.pts.forEach(p => {
-        const isPR = opts.prMarkers && p.y > best;
-        if (p.y > best) best = p.y;
-        if (isPR) {
-          const starText = svgNS('text', {
-            x: xFor(p.x),
-            y: yFor(p.y) - 9,
-            'text-anchor': 'middle',
-            'font-size': '12px',
-            style: 'pointer-events:none;user-select:none;'
-          });
-          starText.textContent = '⭐';
-          svg.appendChild(starText);
-        }
-        
-        const cAttrs = { 
-          cx: xFor(p.x), cy: yFor(p.y), r: 4, 
-          fill: p.is3s ? '#15151e' : s.color, // '#15151e' is a dark background color to make it hollow
-          stroke: s.color, 
-          'stroke-width': p.is3s ? 1.5 : 1 
-        };
-        const c = svgNS('circle', cAttrs);
-        svg.appendChild(c);
-        
-        // Large transparent hit target for easy pointing/touch on mobile
-        const hit = svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 20, fill: 'transparent', opacity: 0 });
-        bindTip(hit, `<b>${(s.name || '') + ' '}${p.y} ${unit}</b><br>${fmtShort(p.x)}${isPR ? '<br>🏆 PR' : ''}`);
-        svg.appendChild(hit);
-      });
+      if (!s.hidePoints) {
+        // PR markers + points
+        let best = -Infinity;
+        s.pts.forEach(p => {
+          const isPR = opts.prMarkers && p.y > best;
+          if (p.y > best) best = p.y;
+          if (isPR) {
+            const starText = svgNS('text', {
+              x: xFor(p.x),
+              y: yFor(p.y) - 9,
+              'text-anchor': 'middle',
+              'font-size': '12px',
+              style: 'pointer-events:none;user-select:none;'
+            });
+            starText.textContent = '⭐';
+            svg.appendChild(starText);
+          }
+          
+          const cAttrs = { 
+            cx: xFor(p.x), cy: yFor(p.y), r: 4, 
+            fill: p.is3s ? '#15151e' : s.color, // '#15151e' is a dark background color to make it hollow
+            stroke: s.color, 
+            'stroke-width': p.is3s ? 1.5 : 1 
+          };
+          const c = svgNS('circle', cAttrs);
+          svg.appendChild(c);
+          
+          // Large transparent hit target for easy pointing/touch on mobile
+          const hit = svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 20, fill: 'transparent', opacity: 0 });
+          bindTip(hit, `<b>${(s.name || '') + ' '}${p.y} ${unit}</b><br>${fmtShort(p.x)}${isPR ? '<br>🏆 PR' : ''}`);
+          svg.appendChild(hit);
+        });
+      }
     });
     return svg;
   }
