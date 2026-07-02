@@ -544,16 +544,25 @@
 
     // ---- summary stat cards ----
     const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: l.e1rmKg }));
-    const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: l.e1rmKg }));
+    const s3raw = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ 
+      x: l.date, 
+      y: l.topSetLoadKg != null ? Calc.e1rm(l.topSetLoadKg, l.topSetRPE, 5) : Calc.roundTo(l.e1rmKg * 1.1, 1)
+    }));
+
+    const combined5sEq = yielding.filter(l => l.hangDurationSeconds === 5 || l.hangDurationSeconds === 3)
+      .map(l => ({ x: l.date, y: l.e1rmKg, is3s: l.hangDurationSeconds === 3 }));
+    combined5sEq.forEach((p, i) => { if (i > 0 && p.is3s) p.dashedPrev = true; });
+
     const bw = await DB.getMeta('bodyweightKg');
     const best5 = s5all.length ? Math.max.apply(null, s5all.map(p => p.y)) : null;
     const totalCard = (bw && best5 != null)
       ? { label: 'Peak total load', value: Calc.roundTo(bw + best5, 1) + ' kg',
           sub: Math.round(((bw + best5) / bw) * 100) + '% BW', color: '#4ecb71' }
       : { label: 'Peak total load', value: '—', sub: bw ? 'no 5s E1RM yet' : 'set bodyweight' };
+    
     view.appendChild(statGrid([
       summarizeSeries('5s E1RM', s5all, '#4f8ef7'),
-      summarizeSeries('3s E1RM', s3all, '#ff6b6b'),
+      summarizeSeries('3s Raw E1RM', s3raw, '#ff6b6b'),
       totalCard,
       { label: 'Total Sessions', value: String(logs.length), sub: 'logged' },
       { label: 'E1RM Sessions', value: String(yielding.length), sub: 'with E1RM' }
@@ -561,19 +570,19 @@
 
     // E1RM chart, two series by duration
     view.appendChild(el('h2', null, ['E1RM trend']));
-    const s5 = s5all, s3 = s3all;
-    if (!s5.length && !s3.length) {
+    if (!combined5sEq.length) {
       view.appendChild(el('div', { class: 'card' }, ['Log Yielding sessions with load + RPE to see E1RM trends.']));
     } else {
       const card = el('div', { class: 'card' });
       card.appendChild(el('div', { class: 'legend' }, [
-        el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s E1RM']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s E1RM']),
+        el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s-eq (Combined)']),
+        el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px dashed #4f8ef7;height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), '3s segment']),
+        el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s Raw']),
         el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px solid rgba(154, 154, 168, 0.5);height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), 'Trend'])
       ]));
       card.appendChild(lineChart([
-        { pts: s5, color: '#4f8ef7', name: '5s' },
-        { pts: s3, color: '#ff6b6b', name: '3s' }
+        { pts: combined5sEq, color: '#4f8ef7', name: '5s-eq' },
+        { pts: s3raw, color: '#ff6b6b', name: '3s Raw' }
       ], 'kg', { movingAvg: true, prMarkers: true }));
       view.appendChild(card);
     }
@@ -753,9 +762,40 @@
         });
         svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#9a9aa8', 'stroke-width': 1.2, opacity: 0.4 }));
       }
-      let d = '';
-      s.pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(p.y); });
-      svg.appendChild(svgNS('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+      if (s.dashed) {
+        let d = '';
+        s.pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(p.x) + ' ' + yFor(p.y); });
+        svg.appendChild(svgNS('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2.5, 'stroke-dasharray': '4,4', 'stroke-linejoin': 'round' }));
+      } else {
+        // Support per-segment dashes by breaking into multiple paths
+        let currentPath = [];
+        let isDashed = false;
+        
+        const flushPath = () => {
+          if (currentPath.length < 2) return;
+          let d = '';
+          currentPath.forEach((pt, i) => { d += (i ? ' L' : 'M') + xFor(pt.x) + ' ' + yFor(pt.y); });
+          const attrs = { d, fill: 'none', stroke: s.color, 'stroke-width': 2.5, 'stroke-linejoin': 'round' };
+          if (isDashed) attrs['stroke-dasharray'] = '4,4';
+          svg.appendChild(svgNS('path', attrs));
+        };
+
+        s.pts.forEach((p, i) => {
+          if (i === 0) {
+            currentPath.push(p);
+          } else {
+            if (p.dashedPrev !== isDashed) {
+              const prevPoint = s.pts[i - 1];
+              flushPath();
+              currentPath = [prevPoint];
+              isDashed = p.dashedPrev;
+            }
+            currentPath.push(p);
+          }
+        });
+        flushPath();
+      }
+
       // PR markers + points
       let best = -Infinity;
       s.pts.forEach(p => {
@@ -772,7 +812,14 @@
           starText.textContent = '⭐';
           svg.appendChild(starText);
         }
-        const c = svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 4, fill: s.color, stroke: '#0a0a0f', 'stroke-width': 1 });
+        
+        const cAttrs = { 
+          cx: xFor(p.x), cy: yFor(p.y), r: 4, 
+          fill: p.is3s ? '#15151e' : s.color, // '#15151e' is a dark background color to make it hollow
+          stroke: s.color, 
+          'stroke-width': p.is3s ? 1.5 : 1 
+        };
+        const c = svgNS('circle', cAttrs);
         svg.appendChild(c);
         
         // Large transparent hit target for easy pointing/touch on mobile
