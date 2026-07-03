@@ -60,7 +60,7 @@
             : which === 'D' ? Templates.templateD()
             : Templates.templateC();
     c.status = 'draft';
-    await DB.put('cycles', c);
+    await DB.save('cycles', c);
     Builder.openCycleEditor(c);
   }
 
@@ -70,22 +70,22 @@
     const c = Templates.templateD();
     const wm3 = await DB.currentWM(3);
     if (!wm3) {
-      await DB.put('workingMaxes', {
+      await DB.save('workingMaxes', {
         id: Templates.uid(), durationSeconds: 3, valueKg: 32.5,
         date: new Date().toISOString().slice(0, 10), source: 'seed',
         notes: 'Estimated fresh 3s max — anchor for 4-Week Top-Set Block. Edit in Settings if yours differs.'
       });
     }
-    await DB.put('cycles', c);
+    await DB.save('cycles', c);
     await activate(c);
   }
   async function cloneCycle(c) {
     const copy = JSON.parse(JSON.stringify(c));
     copy.id = Templates.uid(); copy.name = c.name + ' (copy)'; copy.status = 'draft';
     copy.blocks.forEach(b => b.id = Templates.uid());
-    await DB.put('cycles', copy); App.render();
+    await DB.save('cycles', copy); App.render();
   }
-  async function setStatus(c, s) { c.status = s; await DB.put('cycles', c); App.render(); }
+  async function setStatus(c, s) { c.status = s; await DB.save('cycles', c); App.render(); }
   async function delCycle(c) {
     App.confirm(`Delete cycle "${c.name}"? Log entries are kept (they key on date).`, 'Delete', async () => {
       await DB.softDelete('cycles', c.id); App.render();
@@ -95,10 +95,10 @@
   // ---- 10.5 activate ----------------------------------------------------
   async function activate(c) {
     const all = await DB.getAll('cycles');
-    await Promise.all(all.filter(x => x.status === 'active').map(x => { x.status = 'archived'; return DB.put('cycles', x); }));
+    await Promise.all(all.filter(x => x.status === 'active').map(x => { x.status = 'archived'; return DB.save('cycles', x); }));
     c.status = 'active';
     c.generatedWeeks = Calc.expandCycle(c); // derived snapshot
-    await DB.put('cycles', c);
+    await DB.save('cycles', c);
     App.go('today');
   }
   Builder.activate = activate;
@@ -146,8 +146,8 @@
     body.push(preview);
 
     body.push(el('div', { class: 'spacer' }));
-    body.push(el('button', { class: 'btn', onclick: async () => { await DB.put('cycles', cycle); App.closeSheet(); App.render(); } }, ['Save draft']));
-    body.push(el('button', { class: 'btn ghost', style: 'margin-top:8px', onclick: async () => { await DB.put('cycles', cycle); activate(cycle); App.closeSheet(); } }, ['Save & activate']));
+    body.push(el('button', { class: 'btn', onclick: async () => { await DB.save('cycles', cycle); App.closeSheet(); App.render(); } }, ['Save draft']));
+    body.push(el('button', { class: 'btn ghost', style: 'margin-top:8px', onclick: async () => { await DB.save('cycles', cycle); activate(cycle); App.closeSheet(); } }, ['Save & activate']));
 
     App.sheet('Edit cycle', body);
 

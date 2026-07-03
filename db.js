@@ -57,9 +57,34 @@
   function get(store, key) { return tx(store, 'readonly').then(s => reqP(s.get(key))); }
   function clear(store) { return tx(store, 'readwrite').then(s => reqP(s.clear())); }
 
+  const nowIso = () => new Date().toISOString();
+
+  // User-driven write: stamps updatedAt so the sync merge can pick the newest
+  // copy of a record instead of blindly letting the remote win. Sync/import
+  // paths keep using the raw put() so incoming timestamps are preserved.
+  function save(store, val) { val.updatedAt = nowIso(); return put(store, val); }
+
+  // Batch write in ONE transaction (importBackup used to open a transaction
+  // per record — slow on large merges, and a crash left more partial state).
+  function putAll(store, items) {
+    if (!items || !items.length) return Promise.resolve();
+    return open().then(db => new Promise((resolve, reject) => {
+      const t = db.transaction(store, 'readwrite');
+      const s = t.objectStore(store);
+      items.forEach(x => s.put(x));
+      t.oncomplete = () => resolve();
+      t.onerror = () => reject(t.error);
+      t.onabort = () => reject(t.error);
+    }));
+  }
+
+  // Device-local meta keys: never uploaded to the Gist and never overwritten
+  // by a peer (secrets, per-device prompts, per-device sync bookkeeping).
+  const LOCAL_META = ['githubToken', 'githubGistId', 'lastSyncAt', 'pendingNextDayFeel'];
+
   // ---- meta key/value ---------------------------------------------------
   function getMeta(key) { return get('meta', key).then(r => r ? r.value : undefined); }
-  function setMeta(key, value) { return put('meta', { key, value }); }
+  function setMeta(key, value) { return put('meta', { key, value, updatedAt: nowIso() }); }
 
   // ---- soft delete ------------------------------------------------------
   // Records a tombstone AND removes the record. The tombstone travels through
@@ -71,15 +96,33 @@
       del(store, id)
     ]);
   }
-  // Strip tombstoned records out of an in-memory backup object (keeps the
-  // tombstones themselves so peers still learn about the deletion).
+  // Tombstones expire after 90 days: every device that syncs within that
+  // window learns the deletion, and the payload stops growing forever.
+  const TOMBSTONE_TTL_DAYS = 90;
+  function liveTombstones(tombs) {
+    const cutoff = new Date(Date.now() - TOMBSTONE_TTL_DAYS * 86400000).toISOString();
+    return (tombs || []).filter(t => (t.deletedAt || '') >= cutoff);
+  }
+  // Drop expired tombstone rows from the local store (run after each sync).
+  function gcTombstones() {
+    return getAll('tombstones').then(all => {
+      const live = new Set(liveTombstones(all).map(t => t.id));
+      const dead = all.filter(t => !live.has(t.id));
+      return Promise.all(dead.map(t => del('tombstones', t.id))).then(() => dead.length);
+    });
+  }
+
+  // Strip tombstoned records out of an in-memory backup object (keeps live
+  // tombstones so peers still learn about the deletion). A record edited
+  // AFTER its deletion survives — resurrect-on-edit beats delete.
   function applyTombstones(data) {
-    const tombs = data.tombstones || [];
+    const tombs = liveTombstones(data.tombstones);
     const byStore = {};
-    tombs.forEach(t => { (byStore[t.store] = byStore[t.store] || new Set()).add(t.id); });
+    tombs.forEach(t => { (byStore[t.store] = byStore[t.store] || new Map()).set(t.id, t.deletedAt || ''); });
     const strip = (arr, store) => {
       const dead = byStore[store];
-      return dead ? (arr || []).filter(x => !dead.has(x.id)) : (arr || []);
+      if (!dead) return arr || [];
+      return (arr || []).filter(x => !dead.has(x.id) || ((x.updatedAt || '') > dead.get(x.id)));
     };
     return {
       logEntries: strip(data.logEntries, 'logEntries'),
@@ -139,6 +182,7 @@
     // recompute E1RM for Yielding roles (3s hangs normalised ÷1.1 to 5s-equivalent)
     const yielding = entry.type === 'Yielding';
     entry.e1rmKg = yielding ? Calc.e1rm(entry.topSetLoadKg, entry.topSetRPE, entry.hangDurationSeconds) : null;
+    entry.updatedAt = nowIso();
     return put('logEntries', entry).then(() => entry);
   }
 
@@ -191,6 +235,10 @@
   }
   function preferred(a, b) {
     // Deterministic winner so every device converges on the same row.
+    // A record with a newer updatedAt is a newer user intent — it wins
+    // outright (both devices see the same pair, so this stays convergent).
+    const ta = a.updatedAt || '', tb = b.updatedAt || '';
+    if (ta !== tb) return ta > tb ? a : b;
     // For records that carry a status (cycles), an active copy must beat an
     // archived/draft copy — otherwise collapsing duplicate cycles could drop
     // the active one and leave Today with "No active cycle".
@@ -250,41 +298,34 @@
       getAll('tombstones'),
       getAll('meta')
     ]).then(([logs, wms, cycles, benchmarks, tombstones, meta]) => {
-      const cleanMeta = meta.filter(m => m.key !== 'githubToken' && m.key !== 'githubGistId');
-      return { logEntries: logs, workingMaxes: wms, cycles, benchmarks, tombstones, meta: cleanMeta };
+      const cleanMeta = meta.filter(m => !LOCAL_META.includes(m.key));
+      return { logEntries: logs, workingMaxes: wms, cycles, benchmarks,
+               tombstones: liveTombstones(tombstones), meta: cleanMeta };
     });
   }
 
   function importBackup(data) {
     if (!data) return Promise.resolve();
-    const ops = [];
-    if (data.logEntries) {
-      data.logEntries.forEach(x => ops.push(put('logEntries', x)));
-    }
-    if (data.workingMaxes) {
-      data.workingMaxes.forEach(x => ops.push(put('workingMaxes', x)));
-    }
-    if (data.cycles) {
-      data.cycles.forEach(x => ops.push(put('cycles', x)));
-    }
-    if (data.benchmarks) {
-      data.benchmarks.forEach(x => ops.push(put('benchmarks', x)));
-    }
-    if (data.meta) {
-      data.meta.forEach(x => {
-        if (x.key !== 'githubToken' && x.key !== 'githubGistId') {
-          ops.push(put('meta', x));
-        }
-      });
-    }
-    if (data.tombstones) {
-      data.tombstones.forEach(t => ops.push(put('tombstones', t)));
-    }
-    return Promise.all(ops).then(() => {
-      // Second phase (after all puts settle): honour incoming deletions by
-      // removing any locally-present record that a peer has tombstoned.
-      const dels = (data.tombstones || []).map(t => del(t.store, t.id));
-      return Promise.all(dels);
+    const cleanMeta = (data.meta || []).filter(m => !LOCAL_META.includes(m.key));
+    const tombs = liveTombstones(data.tombstones);
+    // One transaction per store (not per record).
+    return Promise.all([
+      putAll('logEntries', data.logEntries || []),
+      putAll('workingMaxes', data.workingMaxes || []),
+      putAll('cycles', data.cycles || []),
+      putAll('benchmarks', data.benchmarks || []),
+      putAll('meta', cleanMeta),
+      putAll('tombstones', tombs)
+    ]).then(() => {
+      // Second phase: honour incoming deletions — unless the local copy was
+      // edited AFTER the deletion, in which case the edit wins and the
+      // record survives (it will resurrect on peers via the merge).
+      return Promise.all(tombs.map(t =>
+        get(t.store, t.id).then(rec => {
+          if (rec && ((rec.updatedAt || '') > (t.deletedAt || ''))) return;
+          return del(t.store, t.id);
+        })
+      ));
     });
   }
 
@@ -296,9 +337,9 @@
   }
 
   root.DB = {
-    open, put, del, getAll, get, clear, getMeta, setMeta,
+    open, put, save, putAll, del, getAll, get, clear, getMeta, setMeta,
     currentWM, wmDurationsOnFile, activeCycle, logsNewestFirst, addLog,
     seedIfEmpty, resetAll, exportBackup, importBackup,
-    dedupe, dedupeDatabase, softDelete, applyTombstones
+    dedupe, dedupeDatabase, softDelete, applyTombstones, gcTombstones
   };
 })(typeof self !== 'undefined' ? self : this);

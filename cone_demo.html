@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stochastic E1RM Probability Cone — demo</title>
+<style>
+  body {
+    margin: 0; padding: 24px 16px; background: #F7F7FB; color: #2E2E42;
+    font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .card {
+    max-width: 420px; margin: 0 auto; background: #fff;
+    border: 2px solid #E5E5EF; border-radius: 20px; box-shadow: 0 4px 0 #E5E5EF;
+    padding: 16px 14px 12px;
+  }
+  .label { font-size: 11px; font-weight: 800; letter-spacing: 0.8px; color: #A5A5BE; }
+  .titlerow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .chip {
+    background: #E7F8EB; color: #27963F; font-size: 11px; font-weight: 700;
+    padding: 3px 10px; border-radius: 999px;
+  }
+  .caption { font-size: 10.5px; font-weight: 500; color: #A5A5BE; margin-top: 8px; line-height: 1.5; }
+  .caption b { color: #7C7C96; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="titlerow">
+      <span class="label">5S E1RM · PROBABILITY CONE</span>
+      <span class="chip">projection · 6 wks</span>
+    </div>
+    <div id="cone"></div>
+    <p class="caption">
+      <b>Blue</b> logged sessions · <b>gray dashes</b> median trajectory ·
+      <b>green</b> adaptation band · <b>amber/red</b> fatigue band ·
+      <b>hollow rings</b> benchmark 90% targets
+    </p>
+  </div>
+
+  <script src="cone.js"></script>
+  <script>
+    /* Sample arrays only — in the app, feed the same shapes from your
+       existing calc pipeline. The renderer never computes E1RM itself. */
+    var historical = [
+      { x: '2026-04-24', y: 24.0 }, { x: '2026-05-01', y: 24.5 },
+      { x: '2026-05-08', y: 24.5 }, { x: '2026-05-15', y: 25.0 },
+      { x: '2026-05-22', y: 25.5 }, { x: '2026-05-29', y: 25.0 },
+      { x: '2026-06-05', y: 26.0 }, { x: '2026-06-12', y: 26.5 },
+      { x: '2026-06-19', y: 27.0 }, { x: '2026-06-26', y: 27.0 },
+      { x: '2026-07-03', y: 27.5 }
+    ];
+
+    var predictive = {
+      median: [
+        { x: '2026-07-03', y: 27.5 }, { x: '2026-07-10', y: 27.8 },
+        { x: '2026-07-17', y: 28.1 }, { x: '2026-07-24', y: 28.4 },
+        { x: '2026-07-31', y: 28.2 }, { x: '2026-08-07', y: 28.9 },
+        { x: '2026-08-14', y: 29.2 }
+      ],
+      bands: [
+        { level: 0.9,
+          upper: [
+            { x: '2026-07-03', y: 27.5 }, { x: '2026-07-10', y: 28.4 },
+            { x: '2026-07-17', y: 29.2 }, { x: '2026-07-24', y: 30.0 },
+            { x: '2026-07-31', y: 30.2 }, { x: '2026-08-07', y: 31.0 },
+            { x: '2026-08-14', y: 31.6 }
+          ],
+          lower: [
+            { x: '2026-07-03', y: 27.5 }, { x: '2026-07-10', y: 27.1 },
+            { x: '2026-07-17', y: 26.7 }, { x: '2026-07-24', y: 26.4 },
+            { x: '2026-07-31', y: 25.9 }, { x: '2026-08-07', y: 26.2 },
+            { x: '2026-08-14', y: 26.4 }
+          ] },
+        { level: 0.5,
+          upper: [
+            { x: '2026-07-03', y: 27.5 }, { x: '2026-07-10', y: 28.0 },
+            { x: '2026-07-17', y: 28.6 }, { x: '2026-07-24', y: 29.1 },
+            { x: '2026-07-31', y: 29.1 }, { x: '2026-08-07', y: 29.7 },
+            { x: '2026-08-14', y: 30.2 }
+          ],
+          lower: [
+            { x: '2026-07-03', y: 27.5 }, { x: '2026-07-10', y: 27.5 },
+            { x: '2026-07-17', y: 27.5 }, { x: '2026-07-24', y: 27.6 },
+            { x: '2026-07-31', y: 27.3 }, { x: '2026-08-07', y: 27.9 },
+            { x: '2026-08-14', y: 28.2 }
+          ] }
+      ],
+      targets: [
+        { x: '2026-07-25', y: 28.5, hi: 29.9, lo: 27.2, label: 'Test W4' },
+        { x: '2026-08-14', y: 29.2, hi: 31.0, lo: 27.5, label: 'Test' }
+      ]
+    };
+
+    drawStochasticCone(historical, predictive, 'cone', { unit: 'kg' });
+  </script>
+</body>
+</html>

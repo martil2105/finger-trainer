@@ -1,0 +1,117 @@
+/* ============================================================
+   motion.css — functional motion layer
+   ------------------------------------------------------------
+   Motion carries information; it never decorates. Rules:
+   · touch is acknowledged in <100ms (press-sink)
+   · state changes announce themselves (runner phases, ticks)
+   · continuity over spectacle (view enter, sheet exit)
+   · nothing loops idly, nothing celebrates (no gamification)
+   Pairs with motion.js (observers + utilities). Load AFTER
+   style.css. Both files honor prefers-reduced-motion.
+   ============================================================ */
+
+/* ---- 1 · Press-sink: every tappable answers touch ----------
+   Chunky "physical button" response: the element sinks by its
+   shadow height while the shadow collapses. Built for the hard
+   offset shadows of the bright system; degrades cleanly on the
+   current glow shadows.                                        */
+.btn, .chip, .rate button, .stepper button, .list-item, .press-sink {
+  --sink: 3px;
+  transition: transform 0.1s linear, box-shadow 0.1s linear, filter 0.15s ease;
+}
+.btn { --sink: 5px; }               /* primary: 5px edge */
+.btn.secondary, .btn.ghost { --sink: 4px; }
+.btn.small { --sink: 3px; }
+.press-sink--deep { --sink: 5px; }
+.btn:active, .chip:active, .rate button:active, .stepper button:active,
+.list-item:active, .press-sink:active {
+  transform: translateY(var(--sink));
+  box-shadow: none;
+  transition-duration: 0.06s;
+}
+
+/* ---- 2 · View enter: tab switches keep their footing --------
+   Freshly rendered content rises 10px into place; the first
+   cards land a beat apart. Pure CSS — runs on insertion, so
+   App.render() needs no changes.                               */
+@keyframes view-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+#view > * { animation: view-enter 0.22s cubic-bezier(0.22, 1, 0.36, 1) both; }
+#view > *:nth-child(2) { animation-delay: 0.03s; }
+#view > *:nth-child(3) { animation-delay: 0.06s; }
+#view > *:nth-child(4) { animation-delay: 0.09s; }
+#view > *:nth-child(n+5) { animation-delay: 0.12s; }
+
+/* ---- 3 · Runner: the hands-free screen talks in motion ------
+   Phase flips (hang <-> rest) pop the countdown so the change
+   reads from arm's length with chalked hands; every second is
+   a small tick; the final 3 s pulse harder as a "get ready"
+   cue. Classes are applied by motion.js observers — timer.js
+   logic is untouched.                                          */
+@keyframes phase-pop {
+  0%   { transform: scale(0.82); opacity: 0.6; }
+  60%  { transform: scale(1.06); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.runner .countdown.phase-in { animation: phase-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.runner .phase.phase-in     { animation: view-enter 0.25s ease-out both; }
+
+@keyframes tick {
+  from { transform: scale(1.045); }
+  to   { transform: scale(1); }
+}
+.runner .countdown.tick { animation: tick 0.18s ease-out; }
+
+@keyframes tick-final {
+  from { transform: scale(1.12); }
+  to   { transform: scale(1); }
+}
+.runner .countdown.final.tick { animation: tick-final 0.26s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* ---- 4 · Sheet exit: leaves the way it came -----------------
+   style.css animates entry; motion.js adds .closing before
+   removal so sheets slide home instead of vanishing.           */
+@keyframes sheet-down  { to { transform: translateY(100%); opacity: 0.4; } }
+@keyframes overlay-out { to { opacity: 0; } }
+.sheet.closing         { animation: sheet-down 0.2s cubic-bezier(0.4, 0, 1, 1) forwards; }
+.sheet-overlay.closing { animation: overlay-out 0.2s ease forwards; }
+
+/* ---- 5 · Stagger-in: ordinal cells (recovery matrix) --------
+   Add .stagger-in to a container of cells; children pop in
+   18ms apart, left to right — reads as "days filling in",
+   not as a reward.                                             */
+@keyframes cell-in {
+  from { opacity: 0; transform: scale(0.6); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.stagger-in > * { animation: cell-in 0.2s ease-out both; }
+.stagger-in > *:nth-child(2)  { animation-delay: 0.018s; }
+.stagger-in > *:nth-child(3)  { animation-delay: 0.036s; }
+.stagger-in > *:nth-child(4)  { animation-delay: 0.054s; }
+.stagger-in > *:nth-child(5)  { animation-delay: 0.072s; }
+.stagger-in > *:nth-child(6)  { animation-delay: 0.09s;  }
+.stagger-in > *:nth-child(7)  { animation-delay: 0.108s; }
+.stagger-in > *:nth-child(8)  { animation-delay: 0.126s; }
+.stagger-in > *:nth-child(9)  { animation-delay: 0.144s; }
+.stagger-in > *:nth-child(10) { animation-delay: 0.162s; }
+.stagger-in > *:nth-child(11) { animation-delay: 0.18s;  }
+.stagger-in > *:nth-child(12) { animation-delay: 0.198s; }
+.stagger-in > *:nth-child(13) { animation-delay: 0.216s; }
+.stagger-in > *:nth-child(n+14) { animation-delay: 0.234s; }
+
+/* ---- 6 · Expand/collapse hosts (Motion.toggleHeight) --------
+   Give collapsible content this class; motion.js animates the
+   height. Starts collapsed.                                    */
+.collapse-host { height: 0; overflow: hidden; }
+.collapse-host.open { height: auto; }
+
+/* ---- 7 · Accessibility: motion is optional ------------------ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

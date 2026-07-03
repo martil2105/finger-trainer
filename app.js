@@ -215,15 +215,16 @@
     const weeks = App.getWeeks(cycle, wmFor);
     const plan = App.buildPlan(cycle, weeks, todayISO(), wmFor);
 
-    // header
+    // header: logo tile + week/block + next benchmark
     const curWeek = weeks[(plan.week || 1) - 1];
     const nextTest = weeks.find(w => w.isDeloadTest && w.weekNumber >= (plan.week || 1));
+    const nextTestIso = nextTest ? testDayIso(cycle, nextTest) : null;
     const headerRow = el('div', { class: 'brand-header' }, [
-      el('img', { class: 'brand-logo', src: 'icons/icon-192.png', alt: 'Finger Trainer Logo' }),
+      el('img', { class: 'brand-logo', src: 'icons/icon-192.png', alt: 'Finger Trainer' }),
       el('div', { class: 'brand-info' }, [
         el('h1', null, [curWeek ? `Week ${curWeek.weekNumber} · ${curWeek.blockName}` : cycle.name]),
         el('p', { class: 'sub' }, [
-          nextTest ? `Next benchmark test: Week ${nextTest.weekNumber} (${fmtDate(nextTest.startDate)})` : 'No upcoming test'
+          nextTest ? `Benchmark test W${nextTest.weekNumber} · ${fmtDate(nextTestIso)}` : 'No upcoming test'
         ])
       ])
     ]);
@@ -237,20 +238,27 @@
       card.appendChild(el('p', { class: 'muted' }, [`After your ${fmtDate(pending.sessionDate)} session (1 = wrecked, 5 = fresh)`]));
       const r = rating(5, null, async (v) => {
         const entry = await DB.get('logEntries', pending.logEntryId);
-        if (entry) { entry.nextDayFeel = v; await DB.put('logEntries', entry); }
+        if (entry) { entry.nextDayFeel = v; await DB.save('logEntries', entry); }
         await DB.setMeta('pendingNextDayFeel', null);
         App.render();
+        if (window.Sync && Sync.auto) Sync.auto({ force: true });
       });
       card.appendChild(r);
       view.appendChild(card);
     }
 
-    // recovery banner
+    // recovery banner (advisory, never a blocker)
     const logs = await DB.logsNewestFirst();
     const rec = Calc.recoveryFlag(logs);
     if (rec.flagged) {
+      const lastFeel = (logs.find(l => l.nextDayFeel != null) || {}).nextDayFeel;
       view.appendChild(el('div', { class: 'banner warn' }, [
-        'Recovery trending down — consider dropping a set or taking an extra rest day. (Suggestion, not a rule.)'
+        el('p', { style: 'margin:0' }, lastFeel != null
+          ? ['Yesterday felt ', el('b', null, [`${lastFeel}/5`]),
+             ' — consider one fewer back-off set today. ',
+             el('span', { class: 'fine' }, ['(Suggestion, not a rule.)'])]
+          : ['Recovery trending down — consider dropping a set or taking an extra rest day. ',
+             el('span', { class: 'fine' }, ['(Suggestion, not a rule.)'])])
       ]));
     }
     const deload = Calc.deloadTrend(logs);
@@ -263,11 +271,12 @@
       const next = upcomingSession(cycle, weeks, wmFor);
       view.appendChild(el('div', { class: 'card' }, [
         el('h2', null, ['Rest day']),
-        el('p', { class: 'muted' }, [plan.note || 'No fingers today. Sleep + mobility.']),
-        next ? el('p', null, [`Next session: ${next.label} — ${fmtDate(next.date)}`]) : el('span', null, [''])
+        el('p', { class: 'muted', style: 'margin:0 0 6px' }, [plan.note || 'No fingers today. Sleep + mobility.']),
+        next ? el('p', { class: 'sub', style: 'margin:0' }, [`Next session: ${next.label} — ${fmtDate(next.date)}`]) : el('span', null, [''])
       ]));
     } else {
-      view.appendChild(sessionCard(plan));
+      const lastSession = logs.find(l => l.type === 'Yielding' && l.hangDurationSeconds === plan.duration && l.topSetLoadKg != null);
+      view.appendChild(sessionCard(plan, { blockType: curWeek && curWeek.blockType, lastSession }));
     }
 
     // pick a different workout
@@ -319,28 +328,49 @@
     App.sheet("This week's workouts", body);
   }
 
-  function sessionCard(plan) {
-    const c = el('div', { class: 'card' });
+  function sessionCard(plan, ctx) {
+    const c = el('div', { class: 'card', style: 'padding:16px' });
     const roleLabel = { Heavy: 'Heavy yielding', Volume: 'Volume yielding', OIprimer: 'OI primer',
                         Test: 'Benchmark test', Deload: 'Deload' }[plan.role] || plan.role;
+    const tagMap = { Accumulation: 'Accum', Transmutation: 'Trans', Peak: 'Peak',
+                     Realization: 'Real', DeloadTest: 'Test', TopSet: 'Top' };
+    const tagTxt = (ctx && tagMap[ctx.blockType]) || plan.blockName || '';
+    const tagTone = (plan.role === 'Test' || plan.role === 'Deload') ? 'amber' : 'blue';
     c.appendChild(el('div', { class: 'row' }, [
-      el('h2', { class: '' }, [roleLabel]),
-      el('span', { class: 'pill accent' }, [plan.blockName || ''])
+      el('h2', { style: 'margin:0;font-size:18px' }, [roleLabel]),
+      tagTxt ? el('span', { class: `tint-chip ${tagTone}`,
+        style: 'text-transform:uppercase;letter-spacing:0.6px;font-size:10px;font-weight:800;padding:5px 11px' }, [tagTxt])
+             : el('span', null, [''])
     ]));
-    const meta = el('div', { class: 'chips' });
-    if (plan.duration) meta.appendChild(el('span', { class: 'pill' }, [`${plan.duration}s hang`]));
-    if (plan.rpe) meta.appendChild(el('span', { class: 'pill' }, [`@${plan.rpe}`]));
-    if (plan.sets) meta.appendChild(el('span', { class: 'pill' }, [`${plan.sets} ${plan.role === 'Heavy' && plan.protocol === 'topSetPlusBackoffs' ? 'back-offs' : plan.protocol === 'maxSingles' ? 'singles' : 'sets'}`]));
-    if (plan.protocol === 'maxSingles') meta.appendChild(el('span', { class: 'pill' }, ['max singles']));
-    c.appendChild(meta);
+    const bits = [];
+    if (plan.duration) bits.push(`${plan.duration}s hangs`);
+    if (plan.rpe) bits.push(`@${plan.rpe}`);
+    if (plan.sets) bits.push(`${plan.sets} ${plan.role === 'Heavy' && plan.protocol === 'topSetPlusBackoffs' ? 'back-offs' : plan.protocol === 'maxSingles' ? 'singles' : 'sets'}`);
+    bits.push(plan.protocol === 'maxSingles' ? '4–5 min rest' : '3 min rest');
+    c.appendChild(el('p', { class: 'sc-meta' }, [bits.join(' · ')]));
 
-    if (plan.anchor != null) {
-      c.appendChild(el('div', { class: 'big-kg' }, [`Anchor: ~${plan.anchor} kg`]));
-    } else if (plan.role === 'OIprimer') {
-      c.appendChild(el('div', { class: 'big-kg' }, ['Bodyweight / max intent']));
+    if (plan.anchor != null || plan.role === 'OIprimer') {
+      const aRow = el('div', { class: 'anchor-row' });
+      const left = el('div');
+      left.appendChild(el('p', { class: 'micro anchor-label' }, ['Anchor']));
+      left.appendChild(plan.anchor != null
+        ? el('div', { class: 'hero-readout', style: 'margin:0' }, [
+            el('span', { class: 'hero-num', 'data-countup': '' }, [`~${plan.anchor}`]),
+            el('span', { class: 'hero-unit' }, ['kg'])
+          ])
+        : el('div', { style: 'font-size:20px;font-weight:800' }, ['Bodyweight / max intent']));
+      aRow.appendChild(left);
+      const lastS = ctx && ctx.lastSession;
+      if (lastS) {
+        aRow.appendChild(el('p', { class: 'anchor-last' }, [
+          'last session', el('br'),
+          `${lastS.topSetLoadKg} kg · felt @${lastS.topSetRPE != null ? lastS.topSetRPE : '?'}`
+        ]));
+      }
+      c.appendChild(aRow);
     }
     if (plan.backoffAnchor != null) {
-      c.appendChild(el('p', { class: 'muted' }, [`Back-offs around ~${plan.backoffAnchor} kg (@7–8, ~4–5 kg below top).`]));
+      c.appendChild(el('p', { class: 'muted', style: 'margin:0 0 10px' }, [`Back-offs around ~${plan.backoffAnchor} kg (@7–8, ~4–5 kg below top).`]));
     }
     if (plan.wmMissing) {
       c.appendChild(el('div', { class: 'banner danger' }, [`No ${plan.duration}s Working Max on file — set a benchmark for a correct anchor.`]));
@@ -351,7 +381,7 @@
       const ladder = plan.warmup.map((s, i) => `Set ${i + 1}: +${s.load}kg @${s.rpe}`).join('  ·  ');
       c.appendChild(el('div', { class: 'callout' }, [`Warm-up ladder (fixed · ${plan.duration}s · 2–3 min rest): ${ladder}. Prime the flexors, don't fatigue.`]));
       const last = plan.warmup[plan.warmup.length - 1];
-      c.appendChild(el('p', { class: 'muted' }, [`Readiness check at +${last.load}kg: feels @8+ → reduce top-set expectation · @9+ or any joint discomfort → warm-up only, then go climb.`]));
+      c.appendChild(el('p', { class: 'rules-line' }, [`Readiness check at +${last.load}kg: feels @8+ → reduce top-set expectation · @9+ or any joint discomfort → warm-up only, then go climb.`]));
     }
 
     // RPE-leads callout / autoregulation guidance
@@ -363,14 +393,14 @@
       const rpeNote = plan.isLastBlockWeek
         ? '@9.5 ceiling. Final Peak week — one @10 single permitted on your last effort if all prior singles felt clean.'
         : 'RPE ceiling @9.5 — do not exceed.';
-      c.appendChild(el('p', { class: 'muted' }, [
+      c.appendChild(el('p', { class: 'rules-line' }, [
         `3–5 quality singles only. 4–5 min full rest between efforts. ${rpeNote} Fatigue stop: load must drop >5% to maintain @9, grip breaks before second 2s, or any joint discomfort.`
       ]));
     } else if (plan.role === 'Heavy') {
       c.appendChild(el('div', { class: 'callout' }, [
         `Find today's top set — RPE leads (target @${plan.rpe}). WM anchor: ~${plan.anchor} kg. Load up/down freely. Back-offs: ${plan.sets} sets at genuinely @7–8 (~${plan.anchor - plan.backoffAnchor} kg lighter than top).`
       ]));
-      c.appendChild(el('p', { class: 'muted' }, [
+      c.appendChild(el('p', { class: 'rules-line' }, [
         `Fatigue stop: halt back-offs if (1) can't hold full ${plan.duration}s at back-off load, (2) load must drop >5% to stay @8, (3) grip breaks before second ${Math.max(2, (plan.duration || 5) - 1)}, (4) any joint discomfort.`
       ]));
     } else if (plan.role === 'Test') {
@@ -382,13 +412,13 @@
       c.appendChild(el('div', { class: 'callout' }, [
         `Fixed ${plan.sets} sets — no extensions, even if it feels easy. Tendon management.`
       ]));
-      c.appendChild(el('p', { class: 'muted' }, [
+      c.appendChild(el('p', { class: 'rules-line' }, [
         `RPE creep rule: if RPE creeps to @8.5+ by set 3, drop load 5% and finish remaining sets. End early only if joint discomfort.`
       ]));
     }
     if (plan.note) c.appendChild(el('p', { class: 'muted' }, [plan.note]));
 
-    c.appendChild(el('button', { class: 'btn', onclick: () => Runner.start(plan) }, ['Start Session']));
+    c.appendChild(el('button', { class: 'btn start', onclick: () => Runner.start(plan) }, ['Start session']));
     return c;
   }
 
@@ -405,41 +435,167 @@
   // PROGRAM (timeline + builder toggle)
   // =====================================================================
   App.state.programView = 'timeline';
+  App.state.expandedWeek = null;
+
+  function toggleWeek(n) {
+    const wasOpen = App.state.expandedWeek === n;
+    const closing = App.state.expandedWeek != null
+      ? document.querySelector(`.collapse-host[data-week="${App.state.expandedWeek}"]`) : null;
+    const opening = document.querySelector(`.collapse-host[data-week="${n}"]`);
+    App.state.expandedWeek = wasOpen ? null : n;
+    if (window.Motion && Motion.toggleHeight) {
+      if (closing && closing !== opening) Motion.toggleHeight(closing, false);
+      if (opening) Motion.toggleHeight(opening, !wasOpen);
+    } else {
+      if (closing && closing !== opening) closing.classList.remove('open');
+      if (opening) opening.classList.toggle('open', !wasOpen);
+    }
+  }
+
   async function renderProgram(view) {
-    view.appendChild(el('h1', null, ['Program']));
-    const toggle = el('div', { class: 'chips' }, [
-      chip('Timeline', App.state.programView === 'timeline', () => { App.state.programView = 'timeline'; App.render(); }),
-      chip('Builder', App.state.programView === 'builder', () => { App.state.programView = 'builder'; App.render(); })
-    ]);
-    view.appendChild(toggle);
-
-    if (App.state.programView === 'builder') { await Builder.renderList(view); return; }
-
     const cycle = await DB.activeCycle();
-    if (!cycle) { view.appendChild(el('div', { class: 'card' }, ['No active cycle.'])); return; }
+
+    // Builder (block editor) keeps its own screen behind "Edit blocks →"
+    if (App.state.programView === 'builder') {
+      view.appendChild(el('div', { class: 'row', style: 'margin:4px 0 10px;align-items:baseline' }, [
+        el('h1', { style: 'margin:0' }, ['Program']),
+        el('button', { class: 'textbtn', onclick: () => { App.state.programView = 'timeline'; App.render(); } }, ['← Timeline'])
+      ]));
+      await Builder.renderList(view);
+      return;
+    }
+
+    view.appendChild(el('div', { class: 'row', style: 'margin:4px 0 0;align-items:baseline' }, [
+      el('h1', { style: 'margin:0' }, ['Program']),
+      el('button', { class: 'textbtn', onclick: () => { App.state.programView = 'builder'; App.render(); } }, ['Edit blocks →'])
+    ]));
+    if (!cycle) {
+      view.appendChild(el('p', { class: 'sub', style: 'margin:3px 0 14px' }, ['No active cycle']));
+      view.appendChild(el('div', { class: 'card' }, ['No active cycle. Tap "Edit blocks →" to create or activate one.']));
+      return;
+    }
     const wmFor = await wmForFn();
     const weeks = App.getWeeks(cycle, wmFor);
     const curWk = Calc.weekNumberFor(cycle, todayISO());
-    const bandColor = { Transmutation: '#4f8ef7', Peak: '#ff6b6b', Accumulation: '#4ecb71',
-                        Realization: '#b07bff', DeloadTest: '#f7b955', TopSet: '#4f8ef7', Custom: '#9a9aa8' };
-    const hasVolumeDay = Object.values(cycle.weeklyStructure || {}).includes('Volume');
+    view.appendChild(el('p', { class: 'sub', style: 'margin:3px 0 14px' },
+      [`${cycle.name} · ${curWk ? `Week ${curWk} of ${weeks.length}` : `${weeks.length} weeks`}`]));
+
+    // ---- cycle allocation card ----
+    const bandColor = { Accumulation: '#33B94F', Transmutation: '#3D87F5', Peak: '#F04E4E',
+                        Realization: '#9B6DF3', DeloadTest: '#F6A723', TopSet: '#3D87F5', Custom: '#A5A5BE' };
+    const bandTag = { Accumulation: 'ACCUM', Transmutation: 'TRANS', Peak: 'PEAK',
+                      Realization: 'REAL', DeloadTest: 'TEST', TopSet: 'TOP', Custom: 'CUST' };
+    const nextTest = weeks.find(w => w.isDeloadTest && w.weekNumber >= (curWk || 1));
+    const nextTestIso = nextTest ? testDayIso(cycle, nextTest) : null;
+    const daysToTest = nextTestIso ? Calc.daysBetween(todayISO(), nextTestIso) : null;
+
+    const alloc = el('div', { class: 'card', style: 'padding:14px;margin-top:0' });
+    alloc.appendChild(el('div', { class: 'row', style: 'margin-bottom:12px' }, [
+      el('span', { class: 'micro' }, ['Cycle']),
+      (daysToTest != null && daysToTest >= 0)
+        ? el('span', { class: 'tint-chip amber' },
+            [daysToTest === 0 ? 'benchmark today' : `benchmark in ${daysToTest} day${daysToTest === 1 ? '' : 's'}`])
+        : el('span', { class: 'tint-chip blue' }, [`${weeks.length} weeks`])
+    ]));
+    const segs = [];
     weeks.forEach(w => {
-      const node = el('button', { class: 'tl-week list-item' + (w.weekNumber === curWk ? ' now' : ''),
-        onclick: () => showWeekDetail(w, cycle) });
-      node.classList.remove('list-item');
-      node.appendChild(el('div', { class: 'row' }, [
-        el('span', { class: 'wk' }, [`W${w.weekNumber} · ${w.blockName}`]),
-        el('span', { class: 'tl-bandlabel', style: `background:${(bandColor[w.blockType] || '#888')}22;color:${bandColor[w.blockType] || '#888'}` },
-          [w.isDeloadTest ? 'TEST' : w.blockType])
+      const lastSeg = segs[segs.length - 1];
+      if (lastSeg && lastSeg.type === w.blockType) lastSeg.n += 1;
+      else segs.push({ type: w.blockType, n: 1 });
+    });
+    const wrap = el('div', { class: 'alloc-wrap' });
+    const totalDays = weeks.length * 7;
+    const elapsed = Math.min(Math.max(Calc.daysBetween(cycle.startDate, todayISO()), 0), totalDays);
+    if (curWk) {
+      const pct = ((elapsed / (totalDays || 1)) * 100).toFixed(1);
+      wrap.appendChild(el('div', { class: 'alloc-now', style: `left:${pct}%` }));
+      wrap.appendChild(el('div', { class: 'alloc-now-pill', style: `left:${pct}%` }, ['now']));
+    }
+    const track = el('div', { class: 'alloc-track' });
+    const tags = el('div', { class: 'alloc-tags' });
+    segs.forEach(s => {
+      const c = bandColor[s.type] || '#A5A5BE';
+      track.appendChild(el('div', { class: 'alloc-seg', style: `flex:${s.n};background:${c}` }));
+      tags.appendChild(el('span', { class: 'alloc-tag', style: `flex:${s.n};color:${c}` },
+        [bandTag[s.type] || String(s.type || '').toUpperCase().slice(0, 6)]));
+    });
+    wrap.appendChild(track);
+    wrap.appendChild(tags);
+    alloc.appendChild(wrap);
+    alloc.appendChild(el('div', { class: 'alloc-dates' }, [
+      el('span', null, [fmtShort(cycle.startDate)]),
+      nextTestIso ? el('span', { class: 'amber' }, [`test · ${fmtShort(nextTestIso)}`])
+                  : el('span', null, [fmtShort(Calc.addDays(cycle.startDate, totalDays - 1))])
+    ]));
+    view.appendChild(alloc);
+
+    // ---- stepping-stone week list ----
+    if (App.state.expandedWeek == null) App.state.expandedWeek = curWk || 1;
+    const hasVolumeDay = Object.values(cycle.weeklyStructure || {}).includes('Volume');
+    const dayShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const list = el('div', { style: 'margin-top:14px' });
+    weeks.forEach((w, idx) => {
+      const isCur = w.weekNumber === curWk;
+      const isDone = curWk != null && w.weekNumber < curWk;
+      const isTest = !!w.isDeloadTest;
+      const row = el('div', { class: 'wk-row' });
+      const colL = el('div', { class: 'wk-col' });
+      colL.appendChild(el('div', { class: 'wk-tile' + (isCur ? ' current' : isDone ? ' done' : isTest ? ' test' : '') },
+        ['W' + w.weekNumber]));
+      if (idx < weeks.length - 1) colL.appendChild(el('div', { class: 'wk-rail' }));
+      row.appendChild(colL);
+
+      const card = el('button', { class: 'wk-card' + (isCur ? ' current' : isTest ? ' test' : ''),
+        onclick: () => toggleWeek(w.weekNumber) });
+      const chipCls = isDone ? 'done' : isCur ? 'current' : isTest ? 'benchmark' : '';
+      const chipTxt = isDone ? 'Done' : isCur ? 'Current' : isTest ? 'Benchmark' : 'Upcoming';
+      card.appendChild(el('div', { class: 'row', style: 'gap:8px' }, [
+        el('span', { class: 'wk-title' }, [w.blockName]),
+        el('span', { class: 'status-chip ' + chipCls }, [chipTxt])
       ]));
       const line = w.isDeloadTest
         ? `Deload @6 + test ${w.testDurations.join('/')}s · anchor ~${kg(w.deloadAnchorKg)}`
         : hasVolumeDay
           ? `Heavy ${w.heavyDuration}s @${w.heavyRPE} ~${kg(w.heavyAnchorKg)} · Vol ${Math.round((w.volumePct || 0) * 100)}% ~${kg(w.volumeAnchorKg)}`
-          : `Top set ${w.heavyDuration}s @${w.heavyRPE} ~${kg(w.heavyAnchorKg)} · ${w.heavySets} back-offs ~${kg(w.backoffAnchorKg)} (Thu & Sat)`;
-      node.appendChild(el('p', { class: 'muted', style: 'margin:6px 0 0' }, [line]));
-      view.appendChild(node);
+          : `Top set ${w.heavyDuration}s @${w.heavyRPE} ~${kg(w.heavyAnchorKg)} · ${w.heavySets} back-offs ~${kg(w.backoffAnchorKg)}`;
+      card.appendChild(el('p', { class: 'wk-meta' }, [line]));
+      if (isTest) {
+        card.appendChild(el('p', { class: 'wk-testnote' },
+          [`${w.testDurations.join('s + ')}s benchmark — sets the anchors for your next cycle. Come in fresh.`]));
+      }
+
+      // expandable session rows (whole card is the tap target)
+      const host = el('div', { class: 'collapse-host' + (App.state.expandedWeek === w.weekNumber ? ' open' : ''),
+        'data-week': w.weekNumber });
+      const detail = el('div', { class: 'wk-detail' });
+      let sawNext = false;
+      for (let i = 0; i < 7; i++) {
+        const dIso = Calc.addDays(w.startDate, i);
+        const p = App.buildPlan(cycle, weeks, dIso, wmFor);
+        if (p.rest) continue;
+        const roleTxt = { Heavy: 'Heavy', Volume: 'Volume', OIprimer: 'OI primer', Test: 'Benchmark test', Deload: 'Deload' }[p.role] || p.role;
+        const bits = [roleTxt];
+        if (p.duration) bits.push(p.duration + 's');
+        if (p.rpe) bits.push('@' + p.rpe);
+        if (p.sets) bits.push(p.sets + ' sets');
+        if (p.anchor != null) bits.push('~' + p.anchor + ' kg');
+        let dotCls = p.role === 'Test' ? 'test' : 'future';
+        if (dIso < todayISO()) dotCls = 'done';
+        else if (!sawNext && isCur) { if (p.role !== 'Test') dotCls = 'next'; sawNext = true; }
+        detail.appendChild(el('div', { class: 'sess-row' }, [
+          el('span', { class: 'sess-dot ' + dotCls }),
+          el('span', { class: 'sess-day' }, [dayShort[new Date(dIso + 'T00:00:00').getDay()]]),
+          el('span', { class: 'sess-txt' }, [bits.join(' · ')])
+        ]));
+      }
+      host.appendChild(detail);
+      card.appendChild(host);
+      row.appendChild(card);
+      list.appendChild(row);
     });
+    view.appendChild(list);
+    view.appendChild(el('p', { class: 'hint', style: 'margin:0 0 0 58px' },
+      ['Tap a week to expand · blocks and cycle length are editable']));
   }
 
   function showWeekDetail(w, cycle) {
@@ -535,122 +691,319 @@
   function chip(label, sel, onclick) { return el('button', { class: 'chip' + (sel ? ' sel' : ''), onclick }, [label]); }
 
   // =====================================================================
-  // ANALYTICS (SVG charts)
+  // ANALYTICS (Daylight Chunky: verdict-first)
   // =====================================================================
-  async function renderAnalytics(view) {
-    view.appendChild(el('h1', null, ['Analytics']));
-    const logs = (await DB.logsNewestFirst()).slice().reverse(); // oldest -> newest
-    const yielding = logs.filter(l => l.type === 'Yielding' && l.e1rmKg != null);
+  App.state.analyticsRange = 'cycle';
 
-    // ---- summary stat cards ----
-    const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: l.e1rmKg }));
-    const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: l.e1rmKg, is3s: true }));
-    const s3raw = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ 
-      x: l.date, 
-      y: l.topSetLoadKg != null ? Calc.e1rm(l.topSetLoadKg, l.topSetRPE, 5) : Calc.roundTo(l.e1rmKg * 1.1, 1),
-      is3s: true
-    }));
-
-    // Connect the 3s dashed line back to the last 5s point so the timeline is continuous
-    if (s3all.length > 0 && s5all.length > 0) {
-      const first3s = s3all[0];
-      const preceding5s = s5all.slice().reverse().find(p => p.x < first3s.x);
-      if (preceding5s) {
-        s3all.unshift({ x: preceding5s.x, y: preceding5s.y, is3s: false });
-      }
+  // Test day within a deload/test week = the week's Heavy slot (presentation helper)
+  function testDayIso(cycle, w) {
+    let dIso = w.startDate;
+    const ws = (cycle && cycle.weeklyStructure) || {};
+    const heavyDow = Object.keys(ws).find(d => ws[d] === 'Heavy');
+    if (heavyDow && w.startDate) {
+      const d = new Date(w.startDate + 'T00:00:00');
+      d.setDate(d.getDate() + ((DOW.indexOf(heavyDow) - d.getDay() + 7) % 7));
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      dIso = d.toISOString().slice(0, 10);
     }
+    return dIso;
+  }
+  function monthShort(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short' }); }
+  function dowShort(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' }); }
 
-    const bw = await DB.getMeta('bodyweightKg');
-    const best5 = s5all.length ? Math.max.apply(null, s5all.map(p => p.y)) : null;
-    const totalCard = (bw && best5 != null)
-      ? { label: 'Peak total load', value: Calc.roundTo(bw + best5, 1) + ' kg',
-          sub: Math.round(((bw + best5) / bw) * 100) + '% BW', color: '#4ecb71' }
-      : { label: 'Peak total load', value: '—', sub: bw ? 'no 5s E1RM yet' : 'set bodyweight' };
-    
-    view.appendChild(statGrid([
-      summarizeSeries('5s E1RM', s5all, '#4f8ef7'),
-      summarizeSeries('3s Raw E1RM', s3raw, '#ff6b6b'),
-      totalCard,
-      { label: 'Total Sessions', value: String(logs.length), sub: 'logged' },
-      { label: 'E1RM Sessions', value: String(yielding.length), sub: 'with E1RM' }
+  // Hero E1RM chart per spec: viewBox 330x150, 1.5px gridlines, 3px blue 5s
+  // series with area fade, 2.5px gray 3s series, end dots + value tag,
+  // amber TEST marker on the all-time (benchmark) range.
+  function heroChart(s5, s3, opts) {
+    opts = opts || {};
+    const W = 330, H = 150;
+    const xs = [], ys = [];
+    s5.concat(s3).forEach(p => { xs.push(p.x); ys.push(p.y); });
+    const dates = Array.from(new Set(xs)).sort();
+    let ymin = Math.min.apply(null, ys), ymax = Math.max.apply(null, ys);
+    if (ymin === ymax) { ymin -= 2; ymax += 2; }
+    const pad = (ymax - ymin);
+    const ticks = niceTicks(ymin - pad * 0.18, ymax + pad * 0.15, 3);
+    const y0 = ticks[0], y1 = ticks[ticks.length - 1];
+    const xFor = x => 12 + (dates.length <= 1 ? 0.5 : dates.indexOf(x) / (dates.length - 1)) * (318 - 12);
+    const yFor = y => 132 - ((y - y0) / (y1 - y0 || 1)) * (132 - 22);
+    const svg = svgNS('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
+    ticks.forEach(tv => {
+      const gy = yFor(tv);
+      if (gy < 14 || gy > 140) return;
+      svg.appendChild(svgNS('line', { x1: 10, y1: gy, x2: 330, y2: gy, stroke: '#EFEFF3', 'stroke-width': 1.5 }));
+      const tx = svgNS('text', { x: 330, y: gy - 4, 'text-anchor': 'end', 'font-size': 9.5, 'font-weight': 700, fill: '#A5A5BE' });
+      tx.textContent = tv; svg.appendChild(tx);
+    });
+    const pathD = pts => pts.map((p, i) => (i ? 'L' : 'M') + xFor(p.x).toFixed(1) + ' ' + yFor(p.y).toFixed(1)).join(' ');
+    if (s5.length >= 2) {
+      const gid = 'heroFade' + Math.random().toString(36).slice(2, 7);
+      const defs = svgNS('defs', {});
+      const lg = svgNS('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 });
+      lg.appendChild(svgNS('stop', { offset: 0, 'stop-color': '#3D87F5', 'stop-opacity': 0.16 }));
+      lg.appendChild(svgNS('stop', { offset: 1, 'stop-color': '#3D87F5', 'stop-opacity': 0 }));
+      defs.appendChild(lg); svg.appendChild(defs);
+      const a = pathD(s5) + ` L${xFor(s5[s5.length - 1].x).toFixed(1)} 132 L${xFor(s5[0].x).toFixed(1)} 132 Z`;
+      svg.appendChild(svgNS('path', { d: a, fill: `url(#${gid})` }));
+    }
+    if (s3.length >= 2) svg.appendChild(svgNS('path', { d: pathD(s3), fill: 'none', stroke: '#C9CDDA', 'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+    if (s5.length >= 2) svg.appendChild(svgNS('path', { d: pathD(s5), fill: 'none', stroke: '#3D87F5', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+    if (opts.testMarker) {
+      const tm = opts.testMarker;
+      const isLast = s5.length && s5[s5.length - 1].x === tm.x;
+      if (!isLast) {
+        svg.appendChild(svgNS('circle', { cx: xFor(tm.x), cy: yFor(tm.y), r: 4, fill: '#F6A723', stroke: '#FFFFFF', 'stroke-width': 2 }));
+      }
+      const tt = svgNS('text', { x: xFor(tm.x), y: yFor(tm.y) - (isLast ? 22 : 9), 'text-anchor': 'middle', 'font-size': 8.5, 'font-weight': 800, 'letter-spacing': 0.6, fill: '#D98C0A' });
+      tt.textContent = 'TEST'; svg.appendChild(tt);
+    }
+    if (s3.length) {
+      const p = s3[s3.length - 1];
+      svg.appendChild(svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 3.5, fill: '#C9CDDA', stroke: '#FFFFFF', 'stroke-width': 1.5 }));
+    }
+    if (s5.length) {
+      const p = s5[s5.length - 1];
+      svg.appendChild(svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 5, fill: '#3D87F5', stroke: '#FFFFFF', 'stroke-width': 2 }));
+      const vt = svgNS('text', { x: xFor(p.x) - 9, y: yFor(p.y) - 10, 'text-anchor': 'end', 'font-size': 10.5, 'font-weight': 800, fill: '#2C67C2' });
+      vt.textContent = p.y; svg.appendChild(vt);
+    }
+    return svg;
+  }
+
+  async function renderAnalytics(view) {
+    // header row: title + Cycle | All range toggle
+    view.appendChild(el('div', { class: 'row', style: 'margin:4px 0 10px' }, [
+      el('h1', { style: 'margin:0' }, ['Analytics']),
+      el('div', { class: 'seg' }, [
+        el('button', { class: App.state.analyticsRange === 'cycle' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'cycle'; App.render(); } }, ['Cycle']),
+        el('button', { class: App.state.analyticsRange === 'all' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'all'; App.render(); } }, ['All'])
+      ])
     ]));
 
-    // E1RM chart, two series by duration
-    view.appendChild(el('h2', null, ['E1RM trend']));
-    if (!s5all.length && !s3all.length) {
-      view.appendChild(el('div', { class: 'card' }, ['Log Yielding sessions with load + RPE to see E1RM trends.']));
-    } else {
-      const card = el('div', { class: 'card' });
-      card.appendChild(el('div', { class: 'legend' }, [
-        el('span', null, [el('span', { class: 'sw', style: 'background:#4f8ef7' }), '5s E1RM']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px dashed #4f8ef7;height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }), '3s (5s-eq)']),
-        el('span', null, [el('span', { class: 'sw', style: 'background:#ff6b6b' }), '3s Raw']),
-        el('span', null, [
-          el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px solid rgba(79, 142, 247, 0.4);height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }),
-          el('span', { class: 'sw', style: 'background:transparent;border-top:1.5px solid rgba(255, 107, 107, 0.4);height:0;width:14px;display:inline-block;vertical-align:middle;margin-right:5px' }),
-          'Trends'
-        ])
-      ]));
-      card.appendChild(lineChart([
-        { pts: s5all, color: '#4f8ef7', name: '5s', trendColor: '#4f8ef7' },
-        { pts: s3all, color: '#4f8ef7', name: '3s (5s-eq)', dashed: true, noTrend: true },
-        { pts: s3raw, color: '#ff6b6b', name: '3s Raw', trendColor: '#ff6b6b' }
-      ], 'kg', { movingAvg: true, prMarkers: true }));
-      view.appendChild(card);
-    }
+    const logs = (await DB.logsNewestFirst()).slice().reverse(); // oldest -> newest
+    const yielding = logs.filter(l => l.type === 'Yielding' && l.e1rmKg != null);
+    const cycle = await DB.activeCycle();
+    const wmFor = await wmForFn();
+    const weeks = cycle ? App.getWeeks(cycle, wmFor) : [];
+    const curWk = cycle ? Calc.weekNumberFor(cycle, todayISO()) : null;
+    const cycStart = cycle ? cycle.startDate : null;
+    const benches = (await DB.getAll('benchmarks')).sort((a, b) => (a.date < b.date ? -1 : 1));
 
-    // weekly volume load bars
-    view.appendChild(el('h2', null, ['Weekly volume load']));
+    // series: per-session for the cycle view, per-benchmark for all-time
+    const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: l.e1rmKg }));
+    const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: l.e1rmKg }));
+    const inCyc = p => !cycStart || p.x >= cycStart;
+    const s5cyc = s5all.filter(inCyc), s3cyc = s3all.filter(inCyc);
+    const b5 = benches.filter(b => b.durationSeconds === 5).map(b => ({ x: b.date, y: b.maxLoadKg }));
+    const b3 = benches.filter(b => b.durationSeconds === 3).map(b => ({ x: b.date, y: b.maxLoadKg }));
+    const isAll = App.state.analyticsRange === 'all';
+    const p5 = isAll ? (b5.length > 1 ? b5 : s5all) : s5cyc;
+    const p3 = isAll ? (b3.length > 1 ? b3 : s3all) : s3cyc;
+    const nextTest = weeks.find(w => w.isDeloadTest && w.weekNumber >= (curWk || 1));
+    const nextTestIso = nextTest ? testDayIso(cycle, nextTest) : null;
+
+    // ---- hero E1RM card ----
+    const hero = el('div', { class: 'card', style: 'padding:16px 14px 12px;margin-top:0' });
+    const last5 = p5.length ? p5[p5.length - 1].y : null;
+    const last3 = p3.length ? p3[p3.length - 1].y : null;
+    const delta = p5.length >= 2 ? Calc.roundTo(p5[p5.length - 1].y - p5[0].y, 1) : null;
+    hero.appendChild(el('div', { class: 'row' }, [
+      el('span', { class: 'micro' }, ['5s E1RM']),
+      delta != null
+        ? el('span', { class: 'tint-chip ' + (delta >= 0 ? 'green' : 'amber') },
+            [`${delta >= 0 ? '+' : '−'}${Math.abs(delta)} kg ${isAll ? 'all-time' : 'this cycle'}`])
+        : el('span', { class: 'micro' }, [''])
+    ]));
+    hero.appendChild(el('div', { class: 'hero-readout' }, [
+      el('span', { class: 'hero-num', 'data-countup': '' }, [last5 != null ? String(last5) : '—']),
+      el('span', { class: 'hero-unit' }, ['kg']),
+      el('span', { class: 'hero-side' }, [last3 != null ? `3s · ${last3} kg` : ''])
+    ]));
+    if (p5.length >= 2 || p3.length >= 2) {
+      const pr5 = p5.length ? p5.reduce((m, p) => (p.y > m.y ? p : m), p5[0]) : null;
+      hero.appendChild(heroChart(p5, p3, { testMarker: isAll && b5.length > 1 ? pr5 : null }));
+    } else {
+      hero.appendChild(el('p', { class: 'muted', style: 'margin:8px 0' }, ['Log Yielding sessions with load + RPE to build this chart.']));
+    }
+    const leftCap = isAll
+      ? (b5.length > 1 ? `${b5.length} benchmarks · ${p5.length ? monthShort(p5[0].x) + '–' + monthShort(p5[p5.length - 1].x) : ''}`
+                       : (p5.length ? `${p5.length} sessions · ${monthShort(p5[0].x)}–${monthShort(p5[p5.length - 1].x)}` : ''))
+      : 'W1 · cycle start';
+    hero.appendChild(el('div', { class: 'chart-caps' }, [
+      el('span', null, [leftCap]),
+      nextTest ? el('span', { class: 'amber' }, [`next test W${nextTest.weekNumber} · ${dowShort(nextTestIso)}`]) : el('span', null, [''])
+    ]));
+    view.appendChild(hero);
+
+    // ---- stat strip ----
+    const bw = await DB.getMeta('bodyweightKg');
+    const best5 = s5all.length ? Math.max.apply(null, s5all.map(p => p.y)) : null;
+    const d3pct = s3cyc.length >= 2 && s3cyc[0].y ? Math.round(((s3cyc[s3cyc.length - 1].y - s3cyc[0].y) / s3cyc[0].y) * 100) : null;
+    const sessCyc = logs.filter(l => !cycStart || l.date >= cycStart).length;
+    view.appendChild(el('div', { class: 'stat-strip' }, [
+      el('div', { class: 'ss-col' }, [
+        el('span', { class: 'ss-label' }, ['3s E1RM']),
+        el('span', { class: 'ss-value', 'data-countup': '' },
+          s3all.length ? [String(s3all[s3all.length - 1].y), el('small', null, [' kg'])] : ['—']),
+        d3pct != null
+          ? el('span', { class: 'ss-sub' + (d3pct >= 0 ? ' pos' : '') }, [`${d3pct >= 0 ? '+' : ''}${d3pct}% cycle`])
+          : el('span', { class: 'ss-sub' }, ['no cycle data'])
+      ]),
+      el('div', { class: 'ss-col' }, [
+        el('span', { class: 'ss-label' }, ['Peak load']),
+        (bw && best5 != null)
+          ? el('span', { class: 'ss-value' }, [String(Math.round(((bw + best5) / bw) * 100)), el('small', null, ['% BW'])])
+          : el('span', { class: 'ss-value' }, ['—']),
+        el('span', { class: 'ss-sub' }, [(bw && best5 != null) ? `${Calc.roundTo(bw + best5, 1)} kg total` : (bw ? 'no 5s E1RM yet' : 'set bodyweight')])
+      ]),
+      el('div', { class: 'ss-col' }, [
+        el('span', { class: 'ss-label' }, ['Sessions']),
+        el('span', { class: 'ss-value', 'data-countup': '' }, [String(logs.length)]),
+        el('span', { class: 'ss-sub' }, [`${sessCyc} this cycle`])
+      ])
+    ]));
+
+    // ---- fatigue card: recovery matrix + weekly volume ----
+    view.appendChild(el('h2', null, ['Fatigue · last 14 days']));
+    const fat = el('div', { class: 'card', style: 'padding:14px;margin-top:0' });
+    const ndfAll = logs.filter(l => l.nextDayFeel != null);
+    const last14 = ndfAll.slice(-14);
+    const prev14 = ndfAll.slice(-28, -14);
+    const avgOf = a => (a.length ? a.reduce((s, l) => s + l.nextDayFeel, 0) / a.length : null);
+    const a1 = avgOf(last14), a0 = avgOf(prev14);
+    fat.appendChild(el('div', { class: 'row' }, [
+      el('span', { class: 'card-title' }, ['Next-day feel']),
+      a1 != null
+        ? el('span', { class: 'tint-chip ' + (a1 >= 3.5 ? 'green' : 'amber') },
+            [`${a1.toFixed(1)} avg` + (a0 != null ? ` · ${a1 - a0 >= 0 ? '+' : '−'}${Math.abs(a1 - a0).toFixed(1)}` : '')])
+        : el('span', { class: 'tint-chip amber' }, ['no data'])
+    ]));
+    const recColor = { 5: '#33B94F', 4: '#9BDCA8', 3: '#F6C445', 2: '#F58F8F', 1: '#F04E4E' };
+    const cells = el('div', { class: 'rec-cells' });
+    const padN = 14 - last14.length;
+    for (let i = 0; i < 14; i++) {
+      const l = i < padN ? null : last14[i - padN];
+      cells.appendChild(el('div', {
+        class: 'rec-cell',
+        style: l ? `background:${recColor[l.nextDayFeel] || '#F0F0F6'}` : null,
+        role: 'img',
+        'aria-label': l ? `${fmtDate(l.date)} — felt ${l.nextDayFeel} of 5` : 'no session'
+      }));
+    }
+    fat.appendChild(cells);
+    fat.appendChild(el('p', { class: 'card-note', style: 'margin:0' }, ['self-rated after each session · green = fresh · red = wrecked']));
+    fat.appendChild(el('div', { class: 'card-divider' }));
     const byWeek = {};
     logs.forEach(l => {
       if (l.type !== 'Yielding' || l.topSetLoadKg == null || !l.sets) return;
       const wk = isoWeekKey(l.date);
       byWeek[wk] = (byWeek[wk] || 0) + l.topSetLoadKg * l.sets;
     });
-    const bars = Object.keys(byWeek).sort().map(k => ({ label: k.slice(5), value: Math.round(byWeek[k]), full: k }));
-    view.appendChild(bars.length ? el('div', { class: 'card' }, [barChart(bars, 'kg·sets')])
-      : el('div', { class: 'card' }, ['No volume data yet.']));
+    const wkKeys = Object.keys(byWeek).sort().slice(-8);
+    const curKey = isoWeekKey(todayISO());
+    fat.appendChild(el('div', { class: 'row' }, [
+      el('span', { class: 'card-title' }, ['Weekly volume ', el('span', { class: 'soft' }, ['· sets × kg'])]),
+      el('span', { style: 'font-size:12px;font-weight:800;font-variant-numeric:tabular-nums' },
+        [Math.round(byWeek[curKey] || 0).toLocaleString() + ' kg'])
+    ]));
+    if (wkKeys.length) {
+      const maxVol = Math.max.apply(null, wkKeys.map(k => byWeek[k]).concat([1]));
+      const vbars = el('div', { class: 'vol-bars' });
+      wkKeys.forEach(k => {
+        vbars.appendChild(el('div', {
+          class: 'vol-bar' + (k === curKey ? ' cur' : ''),
+          style: `height:${Math.max(4, Math.round((byWeek[k] / maxVol) * 84))}px`,
+          role: 'img', 'aria-label': `week ${k} — ${Math.round(byWeek[k])} kg`
+        }));
+      });
+      fat.appendChild(vbars);
+      fat.appendChild(el('div', { class: 'axis-caps' }, [el('span', null, [`−${wkKeys.length - 1}w`]), el('span', null, ['now'])]));
+    } else {
+      fat.appendChild(el('p', { class: 'muted', style: 'margin:10px 0 0' }, ['No volume data yet.']));
+    }
+    view.appendChild(fat);
 
-    // recovery trend
-    view.appendChild(el('h2', null, ['Recovery (next-day feel)']));
-    const ndf = logs.filter(l => l.nextDayFeel != null).slice(-20).map(l => ({ x: l.date, y: l.nextDayFeel }));
-    view.appendChild(ndf.length ? el('div', { class: 'card' }, [recoveryChart(ndf)])
-      : el('div', { class: 'card' }, ['No next-day-feel data yet.']));
+    // ---- RPE distribution: fixed 6–9.5 buckets, target highlighted ----
+    const rpeCard = el('div', { class: 'card', style: 'padding:14px' });
+    rpeCard.appendChild(el('div', { class: 'row' }, [
+      el('span', { class: 'card-title' }, ['RPE distribution ', el('span', { class: 'soft' }, [isAll ? '· all-time' : '· this cycle'])]),
+      el('span', { class: 'tint-chip blue' }, ['target @8'])
+    ]));
+    const buckets = {};
+    yielding.filter(l => l.topSetRPE != null && (isAll || inCyc({ x: l.date }))).forEach(l => {
+      const k = (Math.round(l.topSetRPE * 2) / 2).toFixed(1);
+      buckets[k] = (buckets[k] || 0) + 1;
+    });
+    const rpeLabels = ['6.0', '6.5', '7.0', '7.5', '8.0', '8.5', '9.0', '9.5'];
+    const maxB = Math.max.apply(null, rpeLabels.map(k => buckets[k] || 0).concat([1]));
+    const rrow = el('div', { class: 'rpe-row' });
+    rpeLabels.forEach(k => {
+      const hot = k === '8.0';
+      const box = el('div', { class: 'rpe-barbox' });
+      box.appendChild(el('div', {
+        class: 'rpe-bar' + (hot ? ' hot' : ''),
+        style: `height:${buckets[k] ? Math.max(8, Math.round((buckets[k] / maxB) * 100)) : 3}%`,
+        role: 'img', 'aria-label': `@${k} — ${buckets[k] || 0} sessions`
+      }));
+      rrow.appendChild(el('div', { class: 'rpe-col' }, [
+        box,
+        el('span', { class: 'rpe-lab' + (hot ? ' hot' : '') }, ['@' + k.replace('.0', '')])
+      ]));
+    });
+    rpeCard.appendChild(rrow);
+    rpeCard.appendChild(el('p', { class: 'card-note' }, ['centered on target — autoregulation is honest, no ego drift']));
+    view.appendChild(rpeCard);
 
-    // RPE distribution
-    view.appendChild(el('h2', null, ['RPE distribution']));
-    const rpeBuckets = {};
-    yielding.forEach(l => { if (l.topSetRPE != null) { const k = (Math.round(l.topSetRPE * 2) / 2).toFixed(1); rpeBuckets[k] = (rpeBuckets[k] || 0) + 1; } });
-    const rpeBars = Object.keys(rpeBuckets).sort((a, b) => +a - +b).map(k => ({ label: '@' + k, value: rpeBuckets[k], full: k }));
-    view.appendChild(rpeBars.length ? el('div', { class: 'card' }, [barChart(rpeBars, 'sessions', { color: '#9b7bf0', intY: true })])
-      : el('div', { class: 'card' }, ['No RPE data yet.']));
+    // ---- E1RM projection cone --------------------------------------------
+    // Display-only layer (cone.js + cone_data.js). buildConeProjection sketches
+    // a trend + uncertainty for the chart; nothing here feeds back into
+    // anchors, Working Maxes, or any training math.
+    view.appendChild(el('h2', null, ['E1RM projection']));
+    const histC = (typeof coneHistory === 'function') ? coneHistory(s5all) : [];
+    if (typeof drawStochasticCone !== 'function' || typeof buildConeProjection !== 'function') {
+      view.appendChild(el('div', { class: 'card' }, ['Projection layer not loaded.']));
+    } else if (histC.length < 3) {
+      view.appendChild(el('div', { class: 'card' }, ['Log at least three 5s Yielding sessions to project a trend.']));
+    } else {
+      const tests = weeks
+        .filter(w => w.isDeloadTest && w.startDate)
+        .map(w => ({ date: testDayIso(cycle, w), label: 'Test W' + w.weekNumber }));
+      const proj = buildConeProjection(histC, { horizonWeeks: 6, tests });
+      if (!proj) {
+        view.appendChild(el('div', { class: 'card' }, ['Not enough spread in recent sessions to project.']));
+      } else {
+        const coneCard = el('div', { class: 'card' });
+        drawStochasticCone(histC, proj, coneCard, { unit: 'kg' });
+        coneCard.appendChild(el('p', { class: 'card-note' }, [
+          'Trend of recent 5s sessions · green = adaptation range · red = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
+        ]));
+        view.appendChild(coneCard);
+      }
+    }
 
     // grip breakdown
     view.appendChild(el('h2', null, ['Grip breakdown']));
     const gripCount = {};
     logs.forEach(l => { if (l.grip) gripCount[l.grip] = (gripCount[l.grip] || 0) + 1; });
     const gripBars = Object.keys(gripCount).sort((a, b) => gripCount[b] - gripCount[a]).map(k => ({ label: k.replace(/([A-Z])/g, ' $1').trim(), value: gripCount[k], full: k }));
-    view.appendChild(gripBars.length ? el('div', { class: 'card' }, [barChart(gripBars, 'sessions', { color: '#4ecb71', intY: true })])
+    view.appendChild(gripBars.length ? el('div', { class: 'card' }, [barChart(gripBars, 'sessions', { color: '#33B94F', intY: true })])
       : el('div', { class: 'card' }, ['No grip data yet.']));
 
-    // benchmark history table
+    // benchmark history table (benches already fetched ascending above)
     view.appendChild(el('h2', null, ['Benchmark history']));
-    const benches = (await DB.getAll('benchmarks')).sort((a, b) => a.date < b.date ? 1 : -1);
-    if (!benches.length) {
+    const benchesDesc = benches.slice().reverse();
+    if (!benchesDesc.length) {
       view.appendChild(el('div', { class: 'card' }, ['No benchmark tests logged yet. Test weeks update your Working Max here.']));
     } else {
       const t = el('table', { class: 'prev' });
       t.appendChild(el('tr', { html: '<th>Date</th><th>Dur</th><th>Max kg</th><th>RPE</th><th>Δ</th>' }));
-      let prevByDur = {};
-      benches.slice().reverse().forEach(b => {
-        const d = prevByDur[b.durationSeconds] != null ? (b.maxLoadKg - prevByDur[b.durationSeconds]) : null;
-        prevByDur[b.durationSeconds] = b.maxLoadKg;
-      });
-      // recompute deltas newest-first display
-      const asc = benches.slice().reverse(); let last = {};
-      const deltas = {};
-      asc.forEach(b => { deltas[b.id] = last[b.durationSeconds] != null ? b.maxLoadKg - last[b.durationSeconds] : null; last[b.durationSeconds] = b.maxLoadKg; });
+      // deltas vs the previous test of the same duration (ascending pass)
+      const deltas = {}; const lastByDur = {};
       benches.forEach(b => {
+        deltas[b.id] = lastByDur[b.durationSeconds] != null ? b.maxLoadKg - lastByDur[b.durationSeconds] : null;
+        lastByDur[b.durationSeconds] = b.maxLoadKg;
+      });
+      benchesDesc.forEach(b => {
         t.appendChild(el('tr', { html:
           `<td>${fmtDate(b.date)}</td><td>${b.durationSeconds}s</td><td>${b.maxLoadKg}</td><td>@${b.rpe}</td><td>${deltas[b.id] == null ? '—' : (deltas[b.id] >= 0 ? '+' : '') + deltas[b.id]}</td>` }));
       });
@@ -716,15 +1069,18 @@
 
   function lineChart(series, unit, opts) {
     opts = opts || {};
-    // Group and aggregate points by date to avoid duplicate entries on the same date
+    // Group and aggregate points by date to avoid duplicate entries on the same date.
+    // Keep the whole point object (max y wins) so per-point flags like `dashedPrev`
+    // and `is3s` survive de-duplication — the dashed state machine and hollow markers
+    // below depend on them.
     const cleanSeries = series.map(s => {
       const grouped = {};
       s.pts.forEach(p => {
-        if (grouped[p.x] === undefined || p.y > grouped[p.x]) {
-          grouped[p.x] = p.y;
+        if (grouped[p.x] === undefined || p.y > grouped[p.x].y) {
+          grouped[p.x] = p;
         }
       });
-      const cleanPts = Object.keys(grouped).sort().map(x => ({ x, y: grouped[x] }));
+      const cleanPts = Object.keys(grouped).sort().map(x => grouped[x]);
       return Object.assign({}, s, { pts: cleanPts });
     });
     series = cleanSeries;
@@ -742,16 +1098,16 @@
 
     // horizontal gridlines + y labels
     ticks.forEach(yv => {
-      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(yv), x2: W - padR, y2: yFor(yv), stroke: 'rgba(255,255,255,0.07)', 'stroke-width': 1 }));
-      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#9a9aa8', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
+      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(yv), x2: W - padR, y2: yFor(yv), stroke: '#EFEFF3', 'stroke-width': 1.5 }));
+      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#A5A5BE', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
     });
     // axis title
-    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#9a9aa8', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
+    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#A5A5BE', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
     // x labels (thinned to ~6)
     const step = Math.max(1, Math.ceil(dates.length / 6));
     dates.forEach((dt, i) => {
       if (i % step !== 0 && i !== dates.length - 1) return;
-      const tx = svgNS('text', { x: xFor(dt), y: H - padB + 16, fill: '#9a9aa8', 'font-size': 10, 'text-anchor': 'middle' });
+      const tx = svgNS('text', { x: xFor(dt), y: H - padB + 16, fill: '#A5A5BE', 'font-size': 10, 'text-anchor': 'middle' });
       tx.textContent = fmtShort(dt); svg.appendChild(tx);
     });
 
@@ -772,7 +1128,7 @@
             d += ` C ${cpX} ${prev.y}, ${cpX} ${p.y}, ${p.x} ${p.y}`;
           }
         });
-        const tColor = s.trendColor || '#9a9aa8';
+        const tColor = s.trendColor || '#A5A5BE';
         svg.appendChild(svgNS('path', { d, fill: 'none', stroke: tColor, 'stroke-width': 1.2, opacity: 0.4 }));
       }
       
@@ -839,7 +1195,7 @@
           
           const cAttrs = { 
             cx: xFor(p.x), cy: yFor(p.y), r: 4, 
-            fill: p.is3s ? '#15151e' : s.color, // '#15151e' is a dark background color to make it hollow
+            fill: p.is3s ? '#FFFFFF' : s.color, // surface fill makes the 3s marker hollow
             stroke: s.color, 
             'stroke-width': p.is3s ? 1.5 : 1 
           };
@@ -858,7 +1214,7 @@
 
   function barChart(bars, unit, opts) {
     opts = opts || {};
-    const color = opts.color || '#4f8ef7';
+    const color = opts.color || '#3D87F5';
     const W = 600, H = 240, padL = 42, padR = 14, padT = 14, padB = 38;
     const max = Math.max.apply(null, bars.map(b => b.value)) || 1;
     const ticks = niceTicks(0, max, opts.intY ? Math.min(5, max + 1) : 5).filter(t => t >= 0);
@@ -868,10 +1224,10 @@
     const svg = svgNS('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
     // gridlines + y labels
     ticks.forEach(tv => {
-      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(tv), x2: W - padR, y2: yFor(tv), stroke: 'rgba(255,255,255,0.07)', 'stroke-width': 1 }));
-      const tx = svgNS('text', { x: padL - 6, y: yFor(tv) + 4, fill: '#9a9aa8', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = opts.intY ? Math.round(tv) : tv; svg.appendChild(tx);
+      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(tv), x2: W - padR, y2: yFor(tv), stroke: '#EFEFF3', 'stroke-width': 1.5 }));
+      const tx = svgNS('text', { x: padL - 6, y: yFor(tv) + 4, fill: '#A5A5BE', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = opts.intY ? Math.round(tv) : tv; svg.appendChild(tx);
     });
-    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#9a9aa8', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
+    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#A5A5BE', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
     bars.forEach((b, i) => {
       const h = (b.value / ymax) * (H - padT - padB);
       const x = padL + i * bw + Math.min(6, bw * 0.12);
@@ -885,12 +1241,12 @@
       svg.appendChild(hit);
       // value label on top
       if (bars.length <= 14) {
-        const vt = svgNS('text', { x: x + rw / 2, y: H - padB - h - 4, fill: '#f0f0f5', 'font-size': 10, 'text-anchor': 'middle' }); vt.textContent = b.value; svg.appendChild(vt);
+        const vt = svgNS('text', { x: x + rw / 2, y: H - padB - h - 4, fill: '#2E2E42', 'font-size': 10, 'font-weight': 700, 'text-anchor': 'middle' }); vt.textContent = b.value; svg.appendChild(vt);
       }
       // x label (thinned)
       const lblStep = Math.max(1, Math.ceil(bars.length / 8));
       if (i % lblStep === 0 || i === bars.length - 1) {
-        const tx = svgNS('text', { x: x + rw / 2, y: H - padB + 16, fill: '#9a9aa8', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = b.label; svg.appendChild(tx);
+        const tx = svgNS('text', { x: x + rw / 2, y: H - padB + 16, fill: '#A5A5BE', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = b.label; svg.appendChild(tx);
       }
     });
     return svg;
@@ -902,26 +1258,26 @@
     const yFor = (y) => H - padB - ((y - 1) / 4) * (H - padT - padB);
     const svg = svgNS('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
     // zones: green>=4, amber 3, red<=2
-    [['#4ecb71', 4, 5, 'Good'], ['#f7b955', 3, 4, 'OK'], ['#ff6b6b', 1, 3, 'Sore']].forEach(z => {
+    [['#33B94F', 4, 5, 'Good'], ['#F6A723', 3, 4, 'OK'], ['#F04E4E', 1, 3, 'Sore']].forEach(z => {
       svg.appendChild(svgNS('rect', { x: padL, y: yFor(z[2]), width: W - padL - padR, height: yFor(z[1]) - yFor(z[2]), fill: z[0], opacity: 0.08 }));
       const lt = svgNS('text', { x: W - padR - 2, y: yFor((z[1] + z[2]) / 2) + 4, fill: z[0], 'font-size': 10, 'text-anchor': 'end', opacity: 0.7 }); lt.textContent = z[3]; svg.appendChild(lt);
     });
     // y ticks 1..5
     [1, 2, 3, 4, 5].forEach(yv => {
-      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#9a9aa8', 'font-size': 10, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
+      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#A5A5BE', 'font-size': 10, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
     });
     // x labels
     const step = Math.max(1, Math.ceil(pts.length / 6));
     pts.forEach((p, i) => {
       if (i % step !== 0 && i !== pts.length - 1) return;
-      const tx = svgNS('text', { x: xFor(i), y: H - padB + 16, fill: '#9a9aa8', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = fmtShort(p.x); svg.appendChild(tx);
+      const tx = svgNS('text', { x: xFor(i), y: H - padB + 16, fill: '#A5A5BE', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = fmtShort(p.x); svg.appendChild(tx);
     });
     let d = '';
     pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(i) + ' ' + yFor(p.y); });
-    svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#f0f0f5', 'stroke-width': 2 }));
+    svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#C9CDDA', 'stroke-width': 2 }));
     pts.forEach((p, i) => {
       const c = svgNS('circle', { cx: xFor(i), cy: yFor(p.y), r: 4,
-        fill: p.y >= 4 ? '#4ecb71' : p.y === 3 ? '#f7b955' : '#ff6b6b', stroke: '#0a0a0f', 'stroke-width': 1 });
+        fill: p.y >= 4 ? '#33B94F' : p.y === 3 ? '#F6A723' : '#F04E4E', stroke: '#FFFFFF', 'stroke-width': 1.5 });
       svg.appendChild(c);
 
       // Large transparent hit target for easy pointing/touch on mobile
@@ -938,7 +1294,7 @@
     stats.forEach(s => {
       grid.appendChild(el('div', { class: 'stat' }, [
         el('span', { class: 'stat-label' }, [s.label]),
-        el('span', { class: 'stat-value', style: s.color ? `color:${s.color}` : null }, [s.value]),
+        el('span', { class: 'stat-value', 'data-countup': '', style: s.color ? `color:${s.color}` : null }, [s.value]),
         el('span', { class: 'stat-sub' }, [s.sub || ''])
       ]));
     });
@@ -1054,7 +1410,7 @@
       const c3 = el('div', { class: 'card' });
       c3.appendChild(el('h2', { style: 'margin-top:0' }, ['Cycle']));
       const di = el('input', { type: 'date', value: cycle.startDate });
-      di.addEventListener('change', async () => { cycle.startDate = di.value; await DB.put('cycles', cycle); });
+      di.addEventListener('change', async () => { cycle.startDate = di.value; await DB.save('cycles', cycle); });
       c3.appendChild(el('div', { class: 'field' }, [el('label', null, [`Start date · ${cycle.name}`]), di]));
       c3.appendChild(el('p', { class: 'muted' }, ['Units: kg']));
       view.appendChild(c3);
@@ -1063,6 +1419,7 @@
     // GitHub Gist Sync Card
     const token = await DB.getMeta('githubToken');
     const gistId = await DB.getMeta('githubGistId');
+    const lastSyncAt = await DB.getMeta('lastSyncAt');
     const cSync = el('div', { class: 'card' });
     cSync.appendChild(el('h2', { style: 'margin-top:0' }, ['GitHub Gist Sync']));
 
@@ -1072,10 +1429,13 @@
         el('span', { style: 'color:var(--success);font-weight:700' }, ['●'])
       ]));
       if (gistId) {
-        cSync.appendChild(el('p', { class: 'muted', style: 'margin-bottom:12px' }, [`Gist ID: ${gistId}`]));
+        cSync.appendChild(el('p', { class: 'muted', style: 'margin-bottom:4px' }, [`Gist ID: ${gistId}`]));
       } else {
-        cSync.appendChild(el('p', { class: 'muted', style: 'margin-bottom:12px' }, ['No Gist linked yet. It will be created on the first sync.']));
+        cSync.appendChild(el('p', { class: 'muted', style: 'margin-bottom:4px' }, ['No Gist linked yet. It will be created on the first sync.']));
       }
+      cSync.appendChild(el('p', { class: 'muted', style: 'margin-bottom:12px' }, [
+        lastSyncAt ? `Last synced: ${new Date(lastSyncAt).toLocaleString()} · syncs automatically` : 'Not synced yet on this device · syncs automatically once connected'
+      ]));
 
       const statusText = el('p', { class: 'muted', style: 'margin:8px 0;font-style:italic' }, ['']);
       const syncBtn = el('button', { class: 'btn small', onclick: async () => {
@@ -1107,7 +1467,7 @@
         ' with the gist scope, then paste it below:'
       ]));
 
-      const tokInput = el('input', { type: 'password', placeholder: 'ghp_xxxxxxxxxxxx', style: 'width:100%;margin-bottom:12px;background:rgba(255,255,255,0.06);border:1px solid var(--card-border);color:var(--text);border-radius:10px;padding:11px 12px;font-size:16px' });
+      const tokInput = el('input', { type: 'password', class: 'input', placeholder: 'ghp_xxxxxxxxxxxx', style: 'margin-bottom:12px' });
       const statusText = el('p', { class: 'muted', style: 'margin:8px 0;font-style:italic' }, ['']);
       const connectBtn = el('button', { class: 'btn small', onclick: async () => {
         const val = tokInput.value.trim();
@@ -1225,9 +1585,10 @@
       const cur = current ? current.valueKg : null;
       const guard = Calc.wmJumpGuard(newVal, cur);
       const save = async () => {
-        await DB.put('workingMaxes', { id: Templates.uid(), durationSeconds: duration, valueKg: newVal,
+        await DB.save('workingMaxes', { id: Templates.uid(), durationSeconds: duration, valueKg: newVal,
           date: todayISO(), source: 'manual', notes: '' });
         App.render();
+        if (window.Sync && Sync.auto) Sync.auto({ force: true });
       };
       if (guard.triggered) {
         App.confirm(`That's a big jump (+${guard.pct}%). Was this a clean @9–9.5 with a touch in reserve? If it felt like an absolute ceiling, consider entering 1–2 kg lower to protect your tendons.`,
@@ -1318,6 +1679,7 @@
       // benchmark capture for Test role
       if (entry.role === 'Test' && entry.topSetLoadKg) await maybeBenchmark(entry);
       App.closeSheet(); App.render();
+      if (window.Sync && Sync.auto) Sync.auto({ force: true });
     } }, [existing ? 'Save changes' : 'Save session']));
 
     if (existing) body.push(el('button', { class: 'btn danger', style: 'margin-top:8px', onclick: async () => {
@@ -1346,12 +1708,12 @@
   async function maybeBenchmark(entry) {
     const dur = entry.hangDurationSeconds || 5;
     const cur = await DB.currentWM(dur);
-    await DB.put('benchmarks', { id: Templates.uid(), date: entry.date, durationSeconds: dur,
+    await DB.save('benchmarks', { id: Templates.uid(), date: entry.date, durationSeconds: dur,
       maxLoadKg: entry.topSetLoadKg, rpe: entry.topSetRPE, resultingWMId: null });
     // offer to update WM
     const guard = Calc.wmJumpGuard(entry.topSetLoadKg, cur && cur.valueKg);
     const apply = async () => {
-      await DB.put('workingMaxes', { id: Templates.uid(), durationSeconds: dur, valueKg: entry.topSetLoadKg,
+      await DB.save('workingMaxes', { id: Templates.uid(), durationSeconds: dur, valueKg: entry.topSetLoadKg,
         date: entry.date, source: 'test', notes: 'From benchmark test' });
       App.render();
     };
@@ -1450,7 +1812,7 @@
         nextDayFeel: num(c[idx.nextDayFeel]) != null ? num(c[idx.nextDayFeel]) : (match ? match.nextDayFeel : null),
         block: c[idx.block] || (match && match.block) || '', notes: c[idx.notes] || '', e1rmKg: e1
       };
-      await DB.put('logEntries', entry);
+      await DB.save('logEntries', entry);
       if (match) { updated++; const i2 = sameDay.indexOf(match); if (i2 >= 0) sameDay.splice(i2, 1); }
       else { (byDate[date] = byDate[date] || []).push(entry); added++; }
     }
@@ -1541,6 +1903,7 @@
     await DB.setMeta('pendingNextDayFeel', { logEntryId: entry.id, sessionDate: entry.date });
     if (plan.role === 'Test' && entry.topSetLoadKg) await maybeBenchmark(entry);
     App.go('today');
+    if (window.Sync && Sync.auto) Sync.auto({ force: true });
   };
 
   // ---- boot -------------------------------------------------------------
@@ -1550,11 +1913,23 @@
 
   (async function init() {
     try {
+      // Ask the browser to protect IndexedDB from storage-pressure eviction
+      // (matters on iOS Safari for an offline-first training log).
+      if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persist().catch(() => {});
+      }
       await DB.seedIfEmpty();
       await DB.dedupe(); // clean up any duplicate/triplicate rows from past syncs
     } catch (err) {
       console.error('Init error:', err);
     }
     App.go('today'); // render() has its own error boundary
+    // Background sync: on launch and whenever the app returns to foreground.
+    if (window.Sync && Sync.auto) {
+      Sync.auto();
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') Sync.auto();
+      });
+    }
   })();
 })();

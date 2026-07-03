@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Motion layer — demo</title>
+<link rel="stylesheet" href="motion.css" />
+<style>
+  /* Demo-only chrome in the chunky light language (the app's own
+     style.css supplies this in production — motion.css only moves). */
+  body { margin: 0; padding: 24px 16px 60px; background: #F7F7FB; color: #2E2E42;
+         font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 420px; margin: 0 auto; }
+  h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; margin: 0 0 2px; }
+  .sub { font-size: 13px; font-weight: 600; color: #7C7C96; margin: 0 0 18px; }
+  .demo-label { font-size: 11px; font-weight: 800; letter-spacing: 0.8px; color: #A5A5BE;
+                text-transform: uppercase; margin: 22px 0 8px; }
+  .card { background: #fff; border: 2px solid #E5E5EF; border-radius: 20px;
+          box-shadow: 0 4px 0 #E5E5EF; padding: 16px 14px; margin: 10px 0; }
+  .btn { display: block; width: 100%; min-height: 52px; border: none; border-radius: 16px;
+         background: #33B94F; box-shadow: 0 5px 0 #27963F; color: #fff;
+         font: 800 15px/1 inherit; font-family: inherit; letter-spacing: 0.6px;
+         text-transform: uppercase; cursor: pointer; margin: 8px 0; }
+  .btn.secondary { background: #fff; border: 2px solid #E5E5EF; box-shadow: 0 4px 0 #E5E5EF;
+                   color: #3D87F5; font-size: 12px; min-height: 46px; }
+  .stat { font-size: 40px; font-weight: 800; letter-spacing: -1px;
+          font-variant-numeric: tabular-nums; }
+  .stat small { font-size: 16px; font-weight: 700; color: #7C7C96; letter-spacing: 0; }
+  .runner { background: #fff; border: 2px solid #E5E5EF; border-radius: 20px;
+            box-shadow: 0 4px 0 #E5E5EF; padding: 26px 14px; text-align: center; }
+  .runner .countdown { display: inline-block; font-size: 84px; font-weight: 800;
+                       letter-spacing: -3px; font-variant-numeric: tabular-nums; }
+  .runner.is-hang .countdown { color: #27963F; }
+  .runner.is-rest .countdown { color: #2C67C2; }
+  .runner .phase { font-size: 13px; font-weight: 800; letter-spacing: 3px;
+                   text-transform: uppercase; color: #A5A5BE; }
+  .cells { display: flex; gap: 5px; }
+  .cells span { flex: 1; height: 20px; border-radius: 6px; }
+  .week { cursor: pointer; }
+  .week .w-title { font-size: 15px; font-weight: 800; }
+  .week .w-meta { font-size: 12px; font-weight: 600; color: #7C7C96; margin-top: 2px; }
+  .w-detail-inner { border-top: 2px solid #F0F0F6; margin-top: 10px; padding-top: 10px;
+                    font-size: 12px; font-weight: 600; color: #7C7C96; line-height: 1.9; }
+  .sheet-overlay { position: fixed; inset: 0; background: rgba(46,46,66,0.4);
+                   display: flex; align-items: flex-end; z-index: 100; }
+  .sheet { background: #fff; width: 100%; max-width: 420px; margin: 0 auto;
+           border-radius: 26px 26px 0 0; padding: 20px 16px 32px;
+           border: 2px solid #E5E5EF; border-bottom: none;
+           animation: sheet-up 0.24s cubic-bezier(0.22, 1, 0.36, 1); }
+  @keyframes sheet-up { from { transform: translateY(100%); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Motion layer</h1>
+  <p class="sub">Every animation is information. Tap things.</p>
+
+  <div class="demo-label">1 · Press-sink (CSS only)</div>
+  <button class="btn press-sink--deep">Start session</button>
+  <button class="btn secondary">Log a session manually →</button>
+
+  <div class="demo-label">2 · View enter + count-up (automatic)</div>
+  <div id="view"></div>
+  <button class="btn secondary" onclick="renderView()">Re-render view</button>
+
+  <div class="demo-label">3 · Runner phase + tick (observers)</div>
+  <div class="runner is-hang">
+    <div class="countdown">5</div>
+    <div class="phase">Hang</div>
+  </div>
+
+  <div class="demo-label">4 · Expand / collapse (Motion.toggleHeight)</div>
+  <div class="card week" onclick="Motion.toggleHeight(document.getElementById('w2'))">
+    <div class="w-title">W2 · Transmutation</div>
+    <div class="w-meta">Heavy 5s @8.5 · 5 sets · ~26 kg — tap to expand</div>
+    <div id="w2" class="collapse-host">
+      <div class="w-detail-inner">
+        Tue — 5s hangs · @8.5 · 5×3 min<br>
+        Thu — 5s hangs · @8.5 · 5×3 min<br>
+        Sat — 3s power pulls · @8 · 4×3 min
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-label">5 · Sheet exit (wraps App.closeSheet)</div>
+  <button class="btn secondary" onclick="openSheet()">Open sheet</button>
+</div>
+
+<script>
+  /* Minimal stand-in for the app's sheet API so motion.js can wrap it. */
+  window.App = {
+    closeSheet: function () {
+      var ov = document.querySelector('.sheet-overlay');
+      if (ov) ov.parentNode.removeChild(ov);
+    }
+  };
+
+  function renderView() {
+    var v = document.getElementById('view');
+    v.innerHTML =
+      '<div class="card"><div class="demo-label" style="margin:0 0 4px">5s e1rm</div>' +
+      '<div class="stat" data-countup>27.5 <small>kg</small></div></div>' +
+      '<div class="card"><div class="demo-label" style="margin:0 0 8px">Recovery · last 14 days</div>' +
+      '<div class="cells stagger-in">' +
+      ['#33B94F','#9BDCA8','#33B94F','#F6C445','#9BDCA8','#33B94F','#F58F8F',
+       '#F6C445','#33B94F','#9BDCA8','#33B94F','#F6C445','#F58F8F','#33B94F']
+        .map(function (c) { return '<span style="background:' + c + '"></span>'; }).join('') +
+      '</div></div>';
+  }
+
+  function openSheet() {
+    var ov = document.createElement('div');
+    ov.className = 'sheet-overlay';
+    ov.innerHTML = '<div class="sheet"><h2 style="margin:0 0 6px;font-size:18px;font-weight:800">Edit blocks</h2>' +
+      '<p style="margin:0 0 14px;font-size:13px;font-weight:600;color:#7C7C96">Sheets now leave the way they came.</p>' +
+      '<button class="btn secondary" onclick="App.closeSheet()">Close</button></div>';
+    ov.addEventListener('click', function (e) { if (e.target === ov) window.App.closeSheet(); });
+    document.body.appendChild(ov);
+  }
+
+  /* Fake session clock so the runner section ticks on its own. */
+  (function () {
+    var runner = document.querySelector('.runner');
+    var cd = runner.querySelector('.countdown');
+    var ph = runner.querySelector('.phase');
+    var t = 5, hang = true;
+    setInterval(function () {
+      t -= 1;
+      if (t < 1) {
+        hang = !hang;
+        t = hang ? 5 : 8;
+        runner.classList.toggle('is-hang', hang);
+        runner.classList.toggle('is-rest', !hang);
+        ph.textContent = hang ? 'Hang' : 'Rest';
+      }
+      cd.textContent = t;
+    }, 1000);
+  })();
+</script>
+<script src="motion.js"></script>
+<script>renderView();</script>
+</body>
+</html>
