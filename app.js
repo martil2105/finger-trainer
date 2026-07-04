@@ -911,6 +911,25 @@
       } else {
         const coneCard = el('div', { class: 'card' });
         drawStochasticCone(histC, proj, coneCard, { unit: 'kg' });
+        const t = proj.targets[0];
+        if (t) {
+          const wm = wmFor(5);
+          let verdict;
+          if (wm == null) {
+            verdict = 'Projected ~' + t.y + ' kg at ' + t.label + ' (90%: ' + t.lo + '–' + t.hi + ').';
+          } else {
+            const gain = Math.round((t.y - wm) * 2) / 2;
+            const range = ' (' + t.lo + '–' + t.hi + ')';
+            if (t.lo > wm) {
+              verdict = 'Projected ~' + t.y + ' kg at ' + t.label + range + ' — trend supports a +' + gain + ' kg WM bump.';
+            } else if (t.y > wm) {
+              verdict = 'Projected ~' + t.y + ' kg at ' + t.label + range + ' — on track, but the range still straddles your ' + wm + ' kg WM.';
+            } else {
+              verdict = 'Projected ~' + t.y + ' kg at ' + t.label + range + ' — trend doesn\'t support a WM bump yet. Come in fresh.';
+            }
+          }
+          coneCard.appendChild(el('p', { class: 'card-title', style: 'margin:10px 0 0;font-size:13px' }, [verdict]));
+        }
         coneCard.appendChild(el('p', { class: 'card-note' }, [
           'Trend of recent 5s sessions · green = adaptation range · red = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
         ]));
