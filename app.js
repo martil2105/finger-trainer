@@ -896,11 +896,14 @@
     // a trend + uncertainty for the chart; nothing here feeds back into
     // anchors, Working Maxes, or any training math.
     view.appendChild(el('h2', null, ['E1RM projection']));
-    const histC = (typeof coneHistory === 'function') ? coneHistory(s5all) : [];
+    // Same 5s-equivalent history as the hero plot: 5s sessions plus 3s
+    // sessions via their stored 5s-eq e1rmKg — so the cone stays current
+    // through 3s blocks instead of freezing at the last 5s session.
+    const histC = (typeof coneHistory === 'function') ? coneHistory(s5all.concat(s3all)) : [];
     if (typeof drawStochasticCone !== 'function' || typeof buildConeProjection !== 'function') {
       view.appendChild(el('div', { class: 'card' }, ['Projection layer not loaded.']));
     } else if (histC.length < 3) {
-      view.appendChild(el('div', { class: 'card' }, ['Log at least three 5s Yielding sessions to project a trend.']));
+      view.appendChild(el('div', { class: 'card' }, ['Log at least three Yielding sessions with load + RPE to project a trend.']));
     } else {
       const tests = weeks
         .filter(w => w.isDeloadTest && w.startDate)
@@ -910,7 +913,7 @@
         view.appendChild(el('div', { class: 'card' }, ['Not enough spread in recent sessions to project.']));
       } else {
         const coneCard = el('div', { class: 'card' });
-        drawStochasticCone(histC, proj, coneCard, { unit: 'kg' });
+        drawStochasticCone(histC, proj, coneCard, { unit: 'kg', todayX: todayISO() });
         const t = proj.targets[0];
         if (t) {
           const wm = wmFor(5);
@@ -931,7 +934,7 @@
           coneCard.appendChild(el('p', { class: 'card-title', style: 'margin:10px 0 0;font-size:13px' }, [verdict]));
         }
         coneCard.appendChild(el('p', { class: 'card-note' }, [
-          'Trend of recent 5s sessions · green = adaptation range · red = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
+          'Trend of recent sessions (3s as 5s-eq) · green = adaptation range · red = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
         ]));
         view.appendChild(coneCard);
       }
