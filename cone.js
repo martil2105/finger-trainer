@@ -28,8 +28,11 @@
        unit: 'kg',
        todayX: <x>,               // cone origin marker; defaults to the
                                   // last historical point
-       colors: { grid, gray, ink, white, pillText, ... } }
+       colors: { grid, gray, ink, white, pillText, ... },
                                   // per-key palette overrides (dark theme)
+       interactive: true }        // touch/pointer scrubber: crosshair +
+                                  // value tooltip (logged / projected /
+                                  // 90% target). Set false to disable.
 
    Repeated calls into the same container replace the previous chart.
    ============================================================ */
@@ -71,17 +74,36 @@
     return (r % 1 === 0) ? String(r) : r.toFixed(1);
   }
 
-  /* One tiny stylesheet, injected once: responsive sizing + rounded
-     tabular numerals so labels don't jitter between renders. */
+  /* One tiny stylesheet, injected once: responsive sizing, rounded tabular
+     numerals, touch capture for the scrubber, and the tooltip chrome. */
   function ensureStyles() {
     if (document.getElementById('cone-css')) return;
     var s = document.createElement('style');
     s.id = 'cone-css';
     s.textContent =
-      'svg.cone-chart{width:100%;height:auto;display:block;' +
+      'svg.cone-chart{width:100%;height:auto;display:block;touch-action:none;' +
       'font-family:ui-rounded,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}' +
-      'svg.cone-chart text{font-variant-numeric:tabular-nums}';
+      'svg.cone-chart text{font-variant-numeric:tabular-nums}' +
+      '.cone-tip{position:fixed;z-index:9999;pointer-events:none;opacity:0;' +
+      'transform:translate(-50%,-100%);transition:opacity .08s;' +
+      'background:#FFFFFF;border:2px solid #E5E5EF;border-radius:10px;' +
+      'box-shadow:0 4px 0 #E5E5EF;padding:7px 10px;white-space:nowrap;' +
+      'font:600 12px/1.45 ui-rounded,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
+      'color:#2E2E42;font-variant-numeric:tabular-nums}' +
+      '.cone-tip b{font-weight:800}';
     document.head.appendChild(s);
+  }
+
+  /* Singleton tooltip element, shared by every cone on the page. */
+  function tipEl() {
+    var t = document.getElementById('cone-tip');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'cone-tip';
+      t.className = 'cone-tip';
+      document.body.appendChild(t);
+    }
+    return t;
   }
 
   function drawStochasticCone(historicalData, predictiveData, container, options) {
@@ -320,6 +342,93 @@
       'font-size': 9.5, 'font-weight': 700, fill: C.gray
     }, svg);
     xr.textContent = fmtX(x1);
+
+    /* ---- interactive scrubber ------------------------------------
+       Drag/touch anywhere on the chart: a crosshair snaps to the
+       nearest data column and a tooltip shows the number — logged
+       value for history, median + 90% band for the projection,
+       label + interval for benchmark targets. ---- */
+    if (opts.interactive !== false && typeof svg.addEventListener === 'function') {
+      var upByX = {}, loByX = {}, targetXs = {};
+      if (bands.length) {
+        bands[0].upper.forEach(function (p) { upByX[p.x] = p.y; });
+        bands[0].lower.forEach(function (p) { loByX[p.x] = p.y; });
+      }
+      targets.forEach(function (p) { targetXs[p.x] = true; });
+
+      var stops = [];
+      hist.forEach(function (p) { stops.push({ kind: 'hist', x: p.x, y: p.y }); });
+      median.forEach(function (p, i) {
+        if (targetXs[p.x]) return;                                   // target stop covers it
+        if (i === 0 && hist.length && hist[hist.length - 1].x === p.x) return; // pinch point
+        stops.push({ kind: 'proj', x: p.x, y: p.y, hi: upByX[p.x], lo: loByX[p.x] });
+      });
+      targets.forEach(function (p) {
+        stops.push({ kind: 'target', x: p.x, y: p.y, hi: p.hi, lo: p.lo, label: p.label });
+      });
+      stops.forEach(function (s) { s.px = sx(s.x); s.py = sy(s.y); });
+
+      if (stops.length) {
+        var xline = svgEl('line', {
+          x1: 0, x2: 0, y1: PAD.top + 2, y2: H - PAD.bottom,
+          stroke: C.ink, 'stroke-width': 2.5, 'stroke-linecap': 'round', opacity: 0
+        }, svg);
+        var xdot = svgEl('circle', { r: 5.5, cx: 0, cy: 0, fill: C.white, 'stroke-width': 3, opacity: 0 }, svg);
+        var dotStroke = { hist: C.blue, proj: C.gray, target: C.amberStrong };
+
+        var tipHtml = function (s) {
+          var when = fmtX(s.x);
+          var range = (s.hi != null && s.lo != null)
+            ? '<br>90%: ' + fmtVal(s.lo) + '–' + fmtVal(s.hi) + ' ' + unit : '';
+          if (s.kind === 'hist') return '<b>' + fmtVal(s.y) + ' ' + unit + '</b> logged<br>' + when;
+          if (s.kind === 'target') {
+            return '<b>' + (s.label || 'Test') + '</b> · ~' + fmtVal(s.y) + ' ' + unit + range + '<br>' + when;
+          }
+          return '<b>~' + fmtVal(s.y) + ' ' + unit + '</b> projected' + range + '<br>' + when;
+        };
+
+        var showAt = function (clientX) {
+          var rect = svg.getBoundingClientRect();
+          if (!rect || !rect.width) return;
+          var px = (clientX - rect.left) * (W / rect.width);
+          var best = null, bd = Infinity;
+          stops.forEach(function (s) {
+            var d = Math.abs(s.px - px);
+            if (d < bd) { bd = d; best = s; }
+          });
+          if (!best) return;
+          xline.setAttribute('x1', best.px); xline.setAttribute('x2', best.px);
+          xline.setAttribute('opacity', 0.3);
+          xdot.setAttribute('cx', best.px); xdot.setAttribute('cy', best.py);
+          xdot.setAttribute('stroke', dotStroke[best.kind] || C.blue);
+          xdot.setAttribute('opacity', 1);
+          var t = tipEl();
+          t.innerHTML = tipHtml(best);
+          var tx = rect.left + (best.px / W) * rect.width;
+          var ty = rect.top + (best.py / H) * rect.height;
+          var vw = (typeof window !== 'undefined' && window.innerWidth) ? window.innerWidth : rect.width;
+          t.style.left = Math.max(70, Math.min(vw - 70, tx)) + 'px';
+          t.style.top = (ty - 12) + 'px';
+          t.style.opacity = '1';
+        };
+        var hide = function () {
+          xline.setAttribute('opacity', 0);
+          xdot.setAttribute('opacity', 0);
+          tipEl().style.opacity = '0';
+        };
+        var onPointer = function (e) { showAt(e.clientX); };
+        var onTouch = function (e) {
+          if (e.touches && e.touches.length) showAt(e.touches[0].clientX);
+        };
+        svg.addEventListener('pointerdown', onPointer);
+        svg.addEventListener('pointermove', onPointer);
+        svg.addEventListener('pointerleave', hide);
+        svg.addEventListener('touchstart', onTouch, { passive: true });
+        svg.addEventListener('touchmove', onTouch, { passive: true });
+        svg.addEventListener('touchend', hide);
+        svg.addEventListener('touchcancel', hide);
+      }
+    }
 
     /* ---- mount (replace any previous cone in this container) ---- */
     var prev = host.querySelector && host.querySelector('svg.cone-chart');

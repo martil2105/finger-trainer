@@ -693,7 +693,7 @@
   // =====================================================================
   // ANALYTICS (Daylight Chunky: verdict-first)
   // =====================================================================
-  App.state.analyticsRange = 'cycle';
+  App.state.analyticsRange = 'all';   // All is the primary range; Cycle is the drill-down
 
   // Test day within a deload/test week = the week's Heavy slot (presentation helper)
   function testDayIso(cycle, w) {
@@ -711,72 +711,13 @@
   function monthShort(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short' }); }
   function dowShort(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' }); }
 
-  // Hero E1RM chart per spec: viewBox 330x150, 1.5px gridlines, 3px blue 5s
-  // series with area fade, 2.5px gray 3s series, end dots + value tag,
-  // amber TEST marker on the all-time (benchmark) range.
-  function heroChart(s5, s3, opts) {
-    opts = opts || {};
-    const W = 330, H = 150;
-    const xs = [], ys = [];
-    s5.concat(s3).forEach(p => { xs.push(p.x); ys.push(p.y); });
-    const dates = Array.from(new Set(xs)).sort();
-    let ymin = Math.min.apply(null, ys), ymax = Math.max.apply(null, ys);
-    if (ymin === ymax) { ymin -= 2; ymax += 2; }
-    const pad = (ymax - ymin);
-    const ticks = niceTicks(ymin - pad * 0.18, ymax + pad * 0.15, 3);
-    const y0 = ticks[0], y1 = ticks[ticks.length - 1];
-    const xFor = x => 12 + (dates.length <= 1 ? 0.5 : dates.indexOf(x) / (dates.length - 1)) * (318 - 12);
-    const yFor = y => 132 - ((y - y0) / (y1 - y0 || 1)) * (132 - 22);
-    const svg = svgNS('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
-    ticks.forEach(tv => {
-      const gy = yFor(tv);
-      if (gy < 14 || gy > 140) return;
-      svg.appendChild(svgNS('line', { x1: 10, y1: gy, x2: 330, y2: gy, stroke: '#EFEFF3', 'stroke-width': 1.5 }));
-      const tx = svgNS('text', { x: 330, y: gy - 4, 'text-anchor': 'end', 'font-size': 9.5, 'font-weight': 700, fill: '#A5A5BE' });
-      tx.textContent = tv; svg.appendChild(tx);
-    });
-    const pathD = pts => pts.map((p, i) => (i ? 'L' : 'M') + xFor(p.x).toFixed(1) + ' ' + yFor(p.y).toFixed(1)).join(' ');
-    if (s5.length >= 2) {
-      const gid = 'heroFade' + Math.random().toString(36).slice(2, 7);
-      const defs = svgNS('defs', {});
-      const lg = svgNS('linearGradient', { id: gid, x1: 0, y1: 0, x2: 0, y2: 1 });
-      lg.appendChild(svgNS('stop', { offset: 0, 'stop-color': '#3D87F5', 'stop-opacity': 0.16 }));
-      lg.appendChild(svgNS('stop', { offset: 1, 'stop-color': '#3D87F5', 'stop-opacity': 0 }));
-      defs.appendChild(lg); svg.appendChild(defs);
-      const a = pathD(s5) + ` L${xFor(s5[s5.length - 1].x).toFixed(1)} 132 L${xFor(s5[0].x).toFixed(1)} 132 Z`;
-      svg.appendChild(svgNS('path', { d: a, fill: `url(#${gid})` }));
-    }
-    if (s3.length >= 2) svg.appendChild(svgNS('path', { d: pathD(s3), fill: 'none', stroke: '#C9CDDA', 'stroke-width': 2.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
-    if (s5.length >= 2) svg.appendChild(svgNS('path', { d: pathD(s5), fill: 'none', stroke: '#3D87F5', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
-    if (opts.testMarker) {
-      const tm = opts.testMarker;
-      const isLast = s5.length && s5[s5.length - 1].x === tm.x;
-      if (!isLast) {
-        svg.appendChild(svgNS('circle', { cx: xFor(tm.x), cy: yFor(tm.y), r: 4, fill: '#F6A723', stroke: '#FFFFFF', 'stroke-width': 2 }));
-      }
-      const tt = svgNS('text', { x: xFor(tm.x), y: yFor(tm.y) - (isLast ? 22 : 9), 'text-anchor': 'middle', 'font-size': 8.5, 'font-weight': 800, 'letter-spacing': 0.6, fill: '#D98C0A' });
-      tt.textContent = 'TEST'; svg.appendChild(tt);
-    }
-    if (s3.length) {
-      const p = s3[s3.length - 1];
-      svg.appendChild(svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 3.5, fill: '#C9CDDA', stroke: '#FFFFFF', 'stroke-width': 1.5 }));
-    }
-    if (s5.length) {
-      const p = s5[s5.length - 1];
-      svg.appendChild(svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 5, fill: '#3D87F5', stroke: '#FFFFFF', 'stroke-width': 2 }));
-      const vt = svgNS('text', { x: xFor(p.x) - 9, y: yFor(p.y) - 10, 'text-anchor': 'end', 'font-size': 10.5, 'font-weight': 800, fill: '#2C67C2' });
-      vt.textContent = p.y; svg.appendChild(vt);
-    }
-    return svg;
-  }
-
   async function renderAnalytics(view) {
     // header row: title + Cycle | All range toggle
     view.appendChild(el('div', { class: 'row', style: 'margin:4px 0 10px' }, [
       el('h1', { style: 'margin:0' }, ['Analytics']),
       el('div', { class: 'seg' }, [
-        el('button', { class: App.state.analyticsRange === 'cycle' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'cycle'; App.render(); } }, ['Cycle']),
-        el('button', { class: App.state.analyticsRange === 'all' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'all'; App.render(); } }, ['All'])
+        el('button', { class: App.state.analyticsRange === 'all' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'all'; App.render(); } }, ['All']),
+        el('button', { class: App.state.analyticsRange === 'cycle' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'cycle'; App.render(); } }, ['Cycle'])
       ])
     ]));
 
@@ -794,19 +735,29 @@
     const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: l.e1rmKg }));
     const inCyc = p => !cycStart || p.x >= cycStart;
     const s5cyc = s5all.filter(inCyc), s3cyc = s3all.filter(inCyc);
-    const b5 = benches.filter(b => b.durationSeconds === 5).map(b => ({ x: b.date, y: b.maxLoadKg }));
-    const b3 = benches.filter(b => b.durationSeconds === 3).map(b => ({ x: b.date, y: b.maxLoadKg }));
+    // Raw 3s E1RM: duration passed as 5 skips the ÷1.1 5s-normalisation
+    const s3raw = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({
+      x: l.date,
+      y: l.topSetLoadKg != null ? Calc.e1rm(l.topSetLoadKg, l.topSetRPE, 5) : Calc.roundTo(l.e1rmKg * 1.1, 1)
+    }));
     const isAll = App.state.analyticsRange === 'all';
-    const p5 = isAll ? (b5.length > 1 ? b5 : s5all) : s5cyc;
-    const p3 = isAll ? (b3.length > 1 ? b3 : s3all) : s3cyc;
+    const r5 = isAll ? s5all : s5cyc;      // 5s sessions
+    const r3eq = isAll ? s3all : s3cyc;    // 3s sessions as 5s-equivalent (stored e1rmKg)
+    const r3raw = isAll ? s3raw : s3raw.filter(inCyc);
+    // Single continuous 5s-equivalent timeline: 5s points solid; 3s points
+    // carry dashedPrev so every segment ENTERING them draws dashed, and is3s
+    // so their markers render hollow (lineChart's per-segment state machine).
+    const combined = r5.map(p => ({ x: p.x, y: p.y }))
+      .concat(r3eq.map(p => ({ x: p.x, y: p.y, is3s: true, dashedPrev: true })))
+      .sort((a, b) => (a.x < b.x ? -1 : a.x > b.x ? 1 : 0));
     const nextTest = weeks.find(w => w.isDeloadTest && w.weekNumber >= (curWk || 1));
     const nextTestIso = nextTest ? testDayIso(cycle, nextTest) : null;
 
-    // ---- hero E1RM card ----
+    // ---- hero: 5s E1RM trend (5s solid · 3s-as-5s-eq dashed) ----
     const hero = el('div', { class: 'card', style: 'padding:16px 14px 12px;margin-top:0' });
-    const last5 = p5.length ? p5[p5.length - 1].y : null;
-    const last3 = p3.length ? p3[p3.length - 1].y : null;
-    const delta = p5.length >= 2 ? Calc.roundTo(p5[p5.length - 1].y - p5[0].y, 1) : null;
+    const lastEq = combined.length ? combined[combined.length - 1].y : null;
+    const last3raw = r3raw.length ? r3raw[r3raw.length - 1].y : null;
+    const delta = combined.length >= 2 ? Calc.roundTo(combined[combined.length - 1].y - combined[0].y, 1) : null;
     hero.appendChild(el('div', { class: 'row' }, [
       el('span', { class: 'micro' }, ['5s E1RM']),
       delta != null
@@ -815,36 +766,53 @@
         : el('span', { class: 'micro' }, [''])
     ]));
     hero.appendChild(el('div', { class: 'hero-readout' }, [
-      el('span', { class: 'hero-num', 'data-countup': '' }, [last5 != null ? String(last5) : '—']),
+      el('span', { class: 'hero-num', 'data-countup': '' }, [lastEq != null ? String(lastEq) : '—']),
       el('span', { class: 'hero-unit' }, ['kg']),
-      el('span', { class: 'hero-side' }, [last3 != null ? `3s · ${last3} kg` : ''])
+      el('span', { class: 'hero-side' }, [last3raw != null ? `3s raw · ${last3raw} kg` : ''])
     ]));
-    if (p5.length >= 2 || p3.length >= 2) {
-      const pr5 = p5.length ? p5.reduce((m, p) => (p.y > m.y ? p : m), p5[0]) : null;
-      hero.appendChild(heroChart(p5, p3, { testMarker: isAll && b5.length > 1 ? pr5 : null }));
+    if (combined.length >= 2) {
+      hero.appendChild(lineChart([
+        { pts: combined, color: '#3D87F5', name: '5s hang', trendColor: '#3D87F5' }
+      ], 'kg', { movingAvg: true, prMarkers: true }));
+      hero.appendChild(el('p', { class: 'card-note', style: 'margin:4px 0 0' },
+        ['solid = 5s hangs · dashed/hollow = 3s hangs (5s-eq) · thin = trend']));
     } else {
       hero.appendChild(el('p', { class: 'muted', style: 'margin:8px 0' }, ['Log Yielding sessions with load + RPE to build this chart.']));
     }
-    const leftCap = isAll
-      ? (b5.length > 1 ? `${b5.length} benchmarks · ${p5.length ? monthShort(p5[0].x) + '–' + monthShort(p5[p5.length - 1].x) : ''}`
-                       : (p5.length ? `${p5.length} sessions · ${monthShort(p5[0].x)}–${monthShort(p5[p5.length - 1].x)}` : ''))
-      : 'W1 · cycle start';
+    const leftCap = combined.length
+      ? `${combined.length} sessions · ${monthShort(combined[0].x)}–${monthShort(combined[combined.length - 1].x)}`
+      : (isAll ? '' : 'W1 · cycle start');
     hero.appendChild(el('div', { class: 'chart-caps' }, [
       el('span', null, [leftCap]),
       nextTest ? el('span', { class: 'amber' }, [`next test W${nextTest.weekNumber} · ${dowShort(nextTestIso)}`]) : el('span', null, [''])
     ]));
     view.appendChild(hero);
 
+    // ---- 3s E1RM trend (raw, unnormalised) ----
+    view.appendChild(el('h2', null, ['3s E1RM · raw']));
+    if (r3raw.length >= 2) {
+      const c3 = el('div', { class: 'card', style: 'margin-top:0' });
+      c3.appendChild(lineChart([
+        { pts: r3raw, color: '#F04E4E', name: '3s raw', trendColor: '#F04E4E' }
+      ], 'kg', { movingAvg: true, prMarkers: true }));
+      c3.appendChild(el('p', { class: 'card-note', style: 'margin:4px 0 0' },
+        ['unnormalised 3s top-set E1RM · thin = trend']));
+      view.appendChild(c3);
+    } else {
+      view.appendChild(el('div', { class: 'card', style: 'margin-top:0' }, ['Log 3s Yielding sessions to build this chart.']));
+    }
+
     // ---- stat strip ----
     const bw = await DB.getMeta('bodyweightKg');
     const best5 = s5all.length ? Math.max.apply(null, s5all.map(p => p.y)) : null;
-    const d3pct = s3cyc.length >= 2 && s3cyc[0].y ? Math.round(((s3cyc[s3cyc.length - 1].y - s3cyc[0].y) / s3cyc[0].y) * 100) : null;
+    const r3c = s3raw.filter(inCyc);
+    const d3pct = r3c.length >= 2 && r3c[0].y ? Math.round(((r3c[r3c.length - 1].y - r3c[0].y) / r3c[0].y) * 100) : null;
     const sessCyc = logs.filter(l => !cycStart || l.date >= cycStart).length;
     view.appendChild(el('div', { class: 'stat-strip' }, [
       el('div', { class: 'ss-col' }, [
-        el('span', { class: 'ss-label' }, ['3s E1RM']),
+        el('span', { class: 'ss-label' }, ['3s raw E1RM']),
         el('span', { class: 'ss-value', 'data-countup': '' },
-          s3all.length ? [String(s3all[s3all.length - 1].y), el('small', null, [' kg'])] : ['—']),
+          s3raw.length ? [String(s3raw[s3raw.length - 1].y), el('small', null, [' kg'])] : ['—']),
         d3pct != null
           ? el('span', { class: 'ss-sub' + (d3pct >= 0 ? ' pos' : '') }, [`${d3pct >= 0 ? '+' : ''}${d3pct}% cycle`])
           : el('span', { class: 'ss-sub' }, ['no cycle data'])
@@ -923,37 +891,6 @@
     }
     view.appendChild(fat);
 
-    // ---- RPE distribution: fixed 6–9.5 buckets, target highlighted ----
-    const rpeCard = el('div', { class: 'card', style: 'padding:14px' });
-    rpeCard.appendChild(el('div', { class: 'row' }, [
-      el('span', { class: 'card-title' }, ['RPE distribution ', el('span', { class: 'soft' }, [isAll ? '· all-time' : '· this cycle'])]),
-      el('span', { class: 'tint-chip blue' }, ['target @8'])
-    ]));
-    const buckets = {};
-    yielding.filter(l => l.topSetRPE != null && (isAll || inCyc({ x: l.date }))).forEach(l => {
-      const k = (Math.round(l.topSetRPE * 2) / 2).toFixed(1);
-      buckets[k] = (buckets[k] || 0) + 1;
-    });
-    const rpeLabels = ['6.0', '6.5', '7.0', '7.5', '8.0', '8.5', '9.0', '9.5'];
-    const maxB = Math.max.apply(null, rpeLabels.map(k => buckets[k] || 0).concat([1]));
-    const rrow = el('div', { class: 'rpe-row' });
-    rpeLabels.forEach(k => {
-      const hot = k === '8.0';
-      const box = el('div', { class: 'rpe-barbox' });
-      box.appendChild(el('div', {
-        class: 'rpe-bar' + (hot ? ' hot' : ''),
-        style: `height:${buckets[k] ? Math.max(8, Math.round((buckets[k] / maxB) * 100)) : 3}%`,
-        role: 'img', 'aria-label': `@${k} — ${buckets[k] || 0} sessions`
-      }));
-      rrow.appendChild(el('div', { class: 'rpe-col' }, [
-        box,
-        el('span', { class: 'rpe-lab' + (hot ? ' hot' : '') }, ['@' + k.replace('.0', '')])
-      ]));
-    });
-    rpeCard.appendChild(rrow);
-    rpeCard.appendChild(el('p', { class: 'card-note' }, ['centered on target — autoregulation is honest, no ego drift']));
-    view.appendChild(rpeCard);
-
     // ---- E1RM projection cone --------------------------------------------
     // Display-only layer (cone.js + cone_data.js). buildConeProjection sketches
     // a trend + uncertainty for the chart; nothing here feeds back into
@@ -980,14 +917,6 @@
         view.appendChild(coneCard);
       }
     }
-
-    // grip breakdown
-    view.appendChild(el('h2', null, ['Grip breakdown']));
-    const gripCount = {};
-    logs.forEach(l => { if (l.grip) gripCount[l.grip] = (gripCount[l.grip] || 0) + 1; });
-    const gripBars = Object.keys(gripCount).sort((a, b) => gripCount[b] - gripCount[a]).map(k => ({ label: k.replace(/([A-Z])/g, ' $1').trim(), value: gripCount[k], full: k }));
-    view.appendChild(gripBars.length ? el('div', { class: 'card' }, [barChart(gripBars, 'sessions', { color: '#33B94F', intY: true })])
-      : el('div', { class: 'card' }, ['No grip data yet.']));
 
     // benchmark history table (benches already fetched ascending above)
     view.appendChild(el('h2', null, ['Benchmark history']));
@@ -1178,7 +1107,7 @@
         s.pts.forEach(p => {
           const isPR = opts.prMarkers && p.y > best;
           if (p.y > best) best = p.y;
-          
+
           if (p.is3s === false) return; // skip point rendering if explicitly marked false
 
           if (isPR) {
@@ -1192,23 +1121,90 @@
             starText.textContent = '⭐';
             svg.appendChild(starText);
           }
-          
-          const cAttrs = { 
-            cx: xFor(p.x), cy: yFor(p.y), r: 4, 
+
+          const cAttrs = {
+            cx: xFor(p.x), cy: yFor(p.y), r: 4,
             fill: p.is3s ? '#FFFFFF' : s.color, // surface fill makes the 3s marker hollow
-            stroke: s.color, 
-            'stroke-width': p.is3s ? 1.5 : 1 
+            stroke: s.color,
+            'stroke-width': p.is3s ? 1.5 : 1
           };
           const c = svgNS('circle', cAttrs);
           svg.appendChild(c);
-          
-          // Large transparent hit target for easy pointing/touch on mobile
-          const hit = svgNS('circle', { cx: xFor(p.x), cy: yFor(p.y), r: 20, fill: 'transparent', opacity: 0 });
-          bindTip(hit, `<b>${(s.name || '') + ' '}${p.y} ${unit}</b><br>${fmtShort(p.x)}${isPR ? '<br>🏆 PR' : ''}`);
-          svg.appendChild(hit);
         });
       }
     });
+
+    // ---- full-surface scrubber -----------------------------------------
+    // Touch or drag anywhere on the plot: a crosshair snaps to the nearest
+    // session and the tooltip reads out kg + date (+ PR). Replaces the old
+    // tiny per-point hit targets, which were fussy on a phone.
+    if (opts.scrub !== false && typeof svg.addEventListener === 'function' && dates.length) {
+      const prSets = series.map(s => {
+        const set = new Set();
+        if (opts.prMarkers) {
+          let best = -Infinity;
+          s.pts.forEach(p => { if (p.y > best) { best = p.y; set.add(p.x); } });
+        }
+        return set;
+      });
+      const xline = svgNS('line', {
+        x1: 0, x2: 0, y1: padT, y2: H - padB,
+        stroke: '#2E2E42', 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0
+      });
+      svg.appendChild(xline);
+      const dots = series.map(s => {
+        const c = svgNS('circle', { r: 6, cx: 0, cy: 0, fill: '#FFFFFF', stroke: s.color, 'stroke-width': 3, opacity: 0 });
+        svg.appendChild(c);
+        return c;
+      });
+      const showAt = (clientX) => {
+        const rect = svg.getBoundingClientRect();
+        if (!rect || !rect.width) return;
+        const px = (clientX - rect.left) * (W / rect.width);
+        let bestDt = null, bd = Infinity;
+        dates.forEach(dt => {
+          const d = Math.abs(xFor(dt) - px);
+          if (d < bd) { bd = d; bestDt = dt; }
+        });
+        if (bestDt == null) return;
+        const bx = xFor(bestDt);
+        xline.setAttribute('x1', bx); xline.setAttribute('x2', bx);
+        xline.setAttribute('opacity', 0.25);
+        const rows = [];
+        let topY = null;
+        series.forEach((s, i) => {
+          const p = s.pts.find(q => q.x === bestDt);
+          if (!p) { dots[i].setAttribute('opacity', 0); return; }
+          const py = yFor(p.y);
+          dots[i].setAttribute('cx', bx); dots[i].setAttribute('cy', py);
+          dots[i].setAttribute('opacity', 1);
+          if (topY == null || py < topY) topY = py;
+          const tag = p.is3s ? '3s hang (5s-eq)' : (s.name || '');
+          rows.push(`<b>${p.y} ${unit}</b>${tag ? ' · ' + tag : ''}${prSets[i].has(p.x) ? ' · PR' : ''}`);
+        });
+        if (!rows.length) return;
+        const t = tooltipEl();
+        t.innerHTML = rows.join('<br>') + '<br>' + fmtShort(bestDt);
+        const sxScreen = rect.left + (bx / W) * rect.width;
+        const syScreen = rect.top + (((topY == null ? padT : topY)) / H) * rect.height;
+        const vw = window.innerWidth || rect.width;
+        t.style.left = Math.max(70, Math.min(vw - 70, sxScreen)) + 'px';
+        t.style.top = (syScreen - 14) + 'px';
+        t.style.opacity = '1';
+      };
+      const hideScrub = () => {
+        xline.setAttribute('opacity', 0);
+        dots.forEach(d => d.setAttribute('opacity', 0));
+        tooltipEl().style.opacity = '0';
+      };
+      svg.addEventListener('pointerdown', e => showAt(e.clientX));
+      svg.addEventListener('pointermove', e => showAt(e.clientX));
+      svg.addEventListener('pointerleave', hideScrub);
+      svg.addEventListener('touchstart', e => { if (e.touches && e.touches.length) showAt(e.touches[0].clientX); }, { passive: true });
+      svg.addEventListener('touchmove', e => { if (e.touches && e.touches.length) showAt(e.touches[0].clientX); }, { passive: true });
+      svg.addEventListener('touchend', hideScrub);
+      svg.addEventListener('touchcancel', hideScrub);
+    }
     return svg;
   }
 
@@ -1676,8 +1672,9 @@
         block: blk || '', notes: state.notes
       };
       await DB.addLog(entry);
-      // benchmark capture for Test role
+      // benchmark capture: Test role explicitly, any other session on a PR
       if (entry.role === 'Test' && entry.topSetLoadKg) await maybeBenchmark(entry);
+      else await maybeAutoBenchmarkPR(entry);
       App.closeSheet(); App.render();
       if (window.Sync && Sync.auto) Sync.auto({ force: true });
     } }, [existing ? 'Save changes' : 'Save session']));
@@ -1724,6 +1721,43 @@
     }
   }
   App.maybeBenchmark = maybeBenchmark;
+
+  // Auto-benchmark on a session PR: a Yielding top set heavier than every
+  // previous log AND benchmark for that duration demonstrated a new max —
+  // record it as a benchmark automatically (Martin, 2026-07-04). Test-day
+  // sessions keep the explicit maybeBenchmark path; CSV/bundled imports
+  // never pass through here, so history loads can't spam benchmarks.
+  // The Working Max update stays behind the same confirm + jump guard as
+  // test days — the benchmark is automatic, the anchor change is a choice.
+  async function maybeAutoBenchmarkPR(entry) {
+    if (!entry || entry.type !== 'Yielding' || entry.topSetLoadKg == null || !entry.hangDurationSeconds) return;
+    const dur = entry.hangDurationSeconds;
+    const [logs, benches] = await Promise.all([DB.getAll('logEntries'), DB.getAll('benchmarks')]);
+    const prevLogs = logs.filter(l => l.id !== entry.id && l.type === 'Yielding' &&
+      l.hangDurationSeconds === dur && l.topSetLoadKg != null).map(l => l.topSetLoadKg);
+    const prevBench = benches.filter(b => b.durationSeconds === dur && b.maxLoadKg != null).map(b => b.maxLoadKg);
+    const baseline = prevLogs.concat(prevBench);
+    if (!baseline.length) return;                      // first entry for this duration — no PR to beat
+    const prevBest = Math.max.apply(null, baseline);
+    if (!(entry.topSetLoadKg > prevBest)) return;      // not a PR
+
+    const cur = await DB.currentWM(dur);
+    await DB.save('benchmarks', { id: Templates.uid(), date: entry.date, durationSeconds: dur,
+      maxLoadKg: entry.topSetLoadKg, rpe: entry.topSetRPE, resultingWMId: null, source: 'session-pr' });
+    const guard = Calc.wmJumpGuard(entry.topSetLoadKg, cur && cur.valueKg);
+    const apply = async () => {
+      await DB.save('workingMaxes', { id: Templates.uid(), durationSeconds: dur, valueKg: entry.topSetLoadKg,
+        date: entry.date, source: 'session-pr', notes: 'From session PR (auto benchmark)' });
+      App.render();
+    };
+    const rpeTxt = entry.topSetRPE != null ? ` @${entry.topSetRPE}` : '';
+    if (guard.triggered) {
+      App.confirm(`New ${dur}s PR — ${entry.topSetLoadKg} kg${rpeTxt} saved as a benchmark. That's a big jump (+${guard.pct}%) for your ${dur}s WM. Update it to ${entry.topSetLoadKg} kg? If it felt like an absolute ceiling, consider 1–2 kg lower.`, `Set ${dur}s WM`, apply);
+    } else {
+      App.confirm(`New ${dur}s PR — ${entry.topSetLoadKg} kg${rpeTxt} saved as a benchmark. Update your ${dur}s Working Max to ${entry.topSetLoadKg} kg?`, `Set ${dur}s WM`, apply);
+    }
+  }
+  App.maybeAutoBenchmarkPR = maybeAutoBenchmarkPR;
 
   // =====================================================================
   // CSV IMPORT / EXPORT (§14)
@@ -1902,6 +1936,7 @@
     await DB.addLog(entry);
     await DB.setMeta('pendingNextDayFeel', { logEntryId: entry.id, sessionDate: entry.date });
     if (plan.role === 'Test' && entry.topSetLoadKg) await maybeBenchmark(entry);
+    else await maybeAutoBenchmarkPR(entry);
     App.go('today');
     if (window.Sync && Sync.auto) Sync.auto({ force: true });
   };
