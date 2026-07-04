@@ -18,8 +18,10 @@
 
    Method (kept deliberately simple and inspectable):
    · straight-line fit (OLS) through the last <= 10 sessions
-   · slope clamped to ±0.05 kg/day so tiny samples can't
-     project absurd trajectories
+   · slope clamped to ±0.12 kg/day so tiny samples can't
+     project absurd trajectories (raised from ±0.05 after a
+     walk-forward backtest; ±0.05 systematically under-projected
+     genuine growth phases at multi-week horizons)
    · cone pinches shut at the last logged session; width grows
      with sqrt(weeks ahead), scaled by the fit's residual
      spread (floored at 0.4 kg so a lucky fit still shows
@@ -61,7 +63,7 @@
     var denom = n * sxx - sx * sx;
     if (!denom) return null;                          /* all on one day */
     var slope = (n * sxy - sx * sy) / denom;          /* kg per day */
-    slope = Math.max(-0.05, Math.min(0.05, slope));   /* ±0.35 kg/week cap */
+    slope = Math.max(-0.12, Math.min(0.12, slope));   /* ±0.84 kg/week cap — walk-forward backtested; ±0.05 under-projected fast growth phases by ~3.5kg at 6wk */
     var intercept = (sy - slope * sx) / n;
 
     /* Residual spread sets the cone width. */

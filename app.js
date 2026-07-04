@@ -913,10 +913,24 @@
         view.appendChild(el('div', { class: 'card' }, ['Not enough spread in recent sessions to project.']));
       } else {
         const coneCard = el('div', { class: 'card' });
-        drawStochasticCone(histC, proj, coneCard, { unit: 'kg', todayX: todayISO() });
-        const t = proj.targets[0];
+        // Display as projected 3s E1RM. The fit runs on the continuous 5s-equivalent
+        // series (all sessions, stable trend); we rescale only the DISPLAY by ×1.1
+        // (3s ≈ 5s-eq × 1.1) so the chart reads in this phase's 3s numbers. The fit,
+        // clamp, and bands are untouched — this is a pure display transform.
+        const PROJ_DUR = 3;
+        const D3 = PROJ_DUR === 3 ? 1.1 : 1;
+        const sc = v => Calc.roundTo(v * D3, 1);
+        const scPts = a => a.map(p => ({ x: p.x, y: sc(p.y) }));
+        const histD = D3 === 1 ? histC : scPts(histC);
+        const projD = D3 === 1 ? proj : {
+          median: scPts(proj.median),
+          bands: proj.bands.map(b => ({ level: b.level, upper: scPts(b.upper), lower: scPts(b.lower) })),
+          targets: proj.targets.map(t => ({ x: t.x, y: sc(t.y), hi: sc(t.hi), lo: sc(t.lo), label: t.label }))
+        };
+        drawStochasticCone(histD, projD, coneCard, { unit: 'kg', todayX: todayISO() });
+        const t = projD.targets[0];
         if (t) {
-          const wm = wmFor(5);
+          const wm = wmFor(PROJ_DUR);   // compare 3s projection against the 3s Working Max
           let verdict;
           if (wm == null) {
             verdict = 'Projected ~' + t.y + ' kg at ' + t.label + ' (90%: ' + t.lo + '–' + t.hi + ').';
@@ -934,7 +948,7 @@
           coneCard.appendChild(el('p', { class: 'card-title', style: 'margin:10px 0 0;font-size:13px' }, [verdict]));
         }
         coneCard.appendChild(el('p', { class: 'card-note' }, [
-          'Trend of recent sessions (3s as 5s-eq) · green = adaptation range · red = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
+          'Projected 3s E1RM · 5s sessions shown as 3s-equivalent · green = adaptation range · red = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
         ]));
         view.appendChild(coneCard);
       }
