@@ -57,7 +57,11 @@
   let R = null; // current session state
 
   Runner.start = async function (plan) {
-    if (R) return;
+    // A previous session left in memory (user switched tabs / backgrounded the
+    // PWA / abandoned it mid-way) used to make every future start silently
+    // no-op via `if (R) return` — the session screen just "wouldn't show up"
+    // until an app reload. Tear any stale session down and start fresh instead.
+    if (R) { clearTick(); releaseWakeLock(); R = null; const h = host(); if (h) h.innerHTML = ''; }
     try {
       unlockAudio();
       await acquireWakeLock();
@@ -273,17 +277,27 @@
     logged.addEventListener('click', () => recordEffort());
     foot.appendChild(logged);
 
+    // Early finish: bank this set and go straight to save — for short sessions
+    // where you don't want to (or can't) complete the remaining back-off sets.
+    const loggedDone = document.createElement('button'); loggedDone.className = 'btn secondary'; loggedDone.textContent = 'Log & finish';
+    loggedDone.addEventListener('click', () => recordEffort({ finishAfter: true }));
+
     const wrap = shell('', { body: '', foot: '' });
     const rb = wrap.querySelector('.r-body'); rb.innerHTML = ''; rb.appendChild(body);
-    const rf = wrap.querySelector('.r-foot'); rf.innerHTML = ''; rf.appendChild(logged);
+    const rf = wrap.querySelector('.r-foot'); rf.innerHTML = ''; rf.appendChild(logged); rf.appendChild(loggedDone);
   }
 
-  function recordEffort() {
+  function recordEffort(opts) {
+    opts = opts || {};
     const p = R.plan;
     if (R._steppers) {
       const loggedLoad = R._steppers.loadSt.getValue();
       const loggedRPE = R._steppers.rpeSt.getValue();
       R.sets.push({ load: loggedLoad, rpe: loggedRPE });
+
+      // Early finish: this set is banked — skip the autoregulation prompts and
+      // go straight to the save screen so a short session still logs cleanly.
+      if (opts.finishAfter) { R.phase = 'END'; return renderEnd(); }
 
       // Volume session RPE creep rule: if @8.5+ by set 3, drop load 5% and finish
       if (p.protocol === 'fixedVolume' && R.effort === 2 && loggedRPE >= 8.5) {
@@ -310,6 +324,7 @@
       }
     } else {
       R.sets.push({ load: null, rpe: null });
+      if (opts.finishAfter) { R.phase = 'END'; return renderEnd(); }
       if (p.protocol === 'oi' && p.sets === '3-5') {
         if (R.effort === 2 || R.effort === 3) {
           return App.confirm(
@@ -348,9 +363,12 @@
     let pinged = false;
     const wrap = shell('is-rest', {
       body: `<div class="phase">Rest · next: ${effortLabel()}</div><div class="countdown rest" id="r-cd">${fmtClock(R.timeLeft)}</div>`,
-      foot: `<button class="btn" id="r-skip">Skip rest — ready now</button>`
+      foot: `<button class="btn" id="r-skip">Skip rest — ready now</button>` +
+            `<button class="btn secondary" id="r-finish">Finish &amp; log now</button>`
     });
     document.getElementById('r-skip').addEventListener('click', () => { clearTick(); startCountdownToHang(); });
+    // End here and save the sets already completed (short-session escape hatch).
+    document.getElementById('r-finish').addEventListener('click', () => { clearTick(); R.phase = 'END'; renderEnd(); });
     tickHandle = setInterval(() => {
       R.timeLeft--;
       const cd = document.getElementById('r-cd');

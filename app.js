@@ -891,46 +891,40 @@
     }
     view.appendChild(fat);
 
-    // ---- E1RM projection cone --------------------------------------------
-    // Display-only layer (cone.js + cone_data.js). buildConeProjection sketches
-    // a trend + uncertainty for the chart; nothing here feeds back into
-    // anchors, Working Maxes, or any training math.
-    view.appendChild(el('h2', null, ['E1RM projection']));
-    // Same 5s-equivalent history as the hero plot: 5s sessions plus 3s
-    // sessions via their stored 5s-eq e1rmKg — so the cone stays current
-    // through 3s blocks instead of freezing at the last 5s session.
-    const histC = (typeof coneHistory === 'function') ? coneHistory(s5all.concat(s3all)) : [];
+    // ---- 3s E1RM projection cone -----------------------------------------
+    // Display-only layer (cone.js + cone_data.js). Martin trains 3s now, so the
+    // cone is built AND read natively in 3s E1RM units — the OLS fit, the slope
+    // clamp, and the uncertainty bands all live in real 3s kg (no ×1.1 display
+    // hack on a 5s-eq fit, which used to let the drawn slope exceed the clamp).
+    // To reach back far enough to fit a trend, historical 5s sessions are
+    // converted UP to 3s-equivalent by a factor estimated from Martin's OWN
+    // 5s→3s data (trend-continuity ≈ 1.08; matches the ~10% short-hang premium).
+    // Nothing here feeds anchors, Working Maxes, or any training math.
+    view.appendChild(el('h2', null, ['E1RM projection · 3s']));
+    const durFactor = (typeof estimateDurationFactor === 'function')
+      ? estimateDurationFactor(s5all, s3raw, { default: 1.10 })
+      : { factor: 1.10, source: 'default', n: 0 };
+    // Native 3s history: 3s sessions as raw 3s E1RM (s3raw); 5s sessions ×factor.
+    const hist3 = (typeof coneHistory === 'function')
+      ? coneHistory(s5all.map(p => ({ x: p.x, y: Calc.roundTo(p.y * durFactor.factor, 1) })).concat(s3raw))
+      : [];
     if (typeof drawStochasticCone !== 'function' || typeof buildConeProjection !== 'function') {
       view.appendChild(el('div', { class: 'card' }, ['Projection layer not loaded.']));
-    } else if (histC.length < 3) {
+    } else if (hist3.length < 3) {
       view.appendChild(el('div', { class: 'card' }, ['Log at least three Yielding sessions with load + RPE to project a trend.']));
     } else {
       const tests = weeks
         .filter(w => w.isDeloadTest && w.startDate)
         .map(w => ({ date: testDayIso(cycle, w), label: 'Test W' + w.weekNumber }));
-      const proj = buildConeProjection(histC, { horizonWeeks: 6, tests });
+      const proj = buildConeProjection(hist3, { horizonWeeks: 6, tests });
       if (!proj) {
         view.appendChild(el('div', { class: 'card' }, ['Not enough spread in recent sessions to project.']));
       } else {
         const coneCard = el('div', { class: 'card' });
-        // Display as projected 3s E1RM. The fit runs on the continuous 5s-equivalent
-        // series (all sessions, stable trend); we rescale only the DISPLAY by ×1.1
-        // (3s ≈ 5s-eq × 1.1) so the chart reads in this phase's 3s numbers. The fit,
-        // clamp, and bands are untouched — this is a pure display transform.
-        const PROJ_DUR = 3;
-        const D3 = PROJ_DUR === 3 ? 1.1 : 1;
-        const sc = v => Calc.roundTo(v * D3, 1);
-        const scPts = a => a.map(p => ({ x: p.x, y: sc(p.y) }));
-        const histD = D3 === 1 ? histC : scPts(histC);
-        const projD = D3 === 1 ? proj : {
-          median: scPts(proj.median),
-          bands: proj.bands.map(b => ({ level: b.level, upper: scPts(b.upper), lower: scPts(b.lower) })),
-          targets: proj.targets.map(t => ({ x: t.x, y: sc(t.y), hi: sc(t.hi), lo: sc(t.lo), label: t.label }))
-        };
-        drawStochasticCone(histD, projD, coneCard, { unit: 'kg', todayX: todayISO() });
-        const t = projD.targets[0];
+        drawStochasticCone(hist3, proj, coneCard, { unit: 'kg', todayX: todayISO() });
+        const t = proj.targets[0];
         if (t) {
-          const wm = wmFor(PROJ_DUR);   // compare 3s projection against the 3s Working Max
+          const wm = wmFor(3);   // compare 3s projection against the 3s Working Max
           let verdict;
           if (wm == null) {
             verdict = 'Projected ~' + t.y + ' kg at ' + t.label + ' (90%: ' + t.lo + '–' + t.hi + ').';
@@ -947,8 +941,11 @@
           }
           coneCard.appendChild(el('p', { class: 'card-title', style: 'margin:10px 0 0;font-size:13px' }, [verdict]));
         }
+        const convNote = durFactor.source === 'calibrated'
+          ? '5s history converted to 3s-equivalent ×' + durFactor.factor + ' (from your 5s→3s data)'
+          : '5s history converted to 3s-equivalent ×' + durFactor.factor + ' (default — log more 3s to calibrate)';
         coneCard.appendChild(el('p', { class: 'card-note' }, [
-          'Projected 3s E1RM · 5s sessions shown as 3s-equivalent · green = adaptation range · red = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
+          'Projected 3s E1RM · ' + convNote + ' · green = adaptation range · red = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
         ]));
         view.appendChild(coneCard);
       }

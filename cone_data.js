@@ -117,6 +117,65 @@
     };
   }
 
+  /* estimateDurationFactor(pts5, pts3, opts)
+     -----------------------------------------------------------------
+     Estimates how much higher a 3s max-hang E1RM runs vs a 5s one, from
+     the athlete's OWN data, so historical 5s sessions can be converted
+     to 3s-equivalent for a native-3s projection.
+
+     Method (trend continuity — the honest way with no paired hangs):
+       · fit the 5s raw-E1RM trend (OLS, last <= 10 sessions)
+       · for each 3s session inside a short window after the last 5s
+         session, factor_i = raw3s / (5s trend extrapolated to that date)
+       · this nets out the strength GAINED across the time gap, which a
+         crude level-ratio (mean3s / mean5s) would wrongly bake in
+       · take the median, clamp to [min,max] so a noisy fit can't produce
+         an absurd factor, and fall back to `default` (a ~10% short-hang
+         premium) until >= 2 usable 3s sessions exist
+
+     Returns { factor, source: 'calibrated'|'default', n }.
+     Pure display-layer helper — reads arrays, touches no DB/WM/calc math.
+
+     pts5 / pts3: [{x:'YYYY-MM-DD', y: rawE1RM}]  (RAW, un-normalised)
+     opts: { default:1.10, min:1.05, max:1.15, windowDays:42 } */
+  function estimateDurationFactor(pts5, pts3, opts) {
+    var o = opts || {};
+    var def = o.default != null ? o.default : 1.10;
+    var lo = o.min != null ? o.min : 1.05;
+    var hi = o.max != null ? o.max : 1.15;
+    var windowDays = o.windowDays != null ? o.windowDays : 42;
+
+    var h5 = coneHistory(pts5), h3 = coneHistory(pts3);
+    if (h5.length < 3 || h3.length < 1) return { factor: def, source: 'default', n: 0 };
+
+    var use = h5.slice(-10);
+    var t0 = Date.parse(use[0].x);
+    var ts = use.map(function (p) { return (Date.parse(p.x) - t0) / DAY; });
+    var n = use.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+    use.forEach(function (p, i) { sx += ts[i]; sy += p.y; sxx += ts[i] * ts[i]; sxy += ts[i] * p.y; });
+    var den = n * sxx - sx * sx;
+    if (!den) return { factor: def, source: 'default', n: 0 };
+    var slope = (n * sxy - sx * sy) / den, intercept = (sy - slope * sx) / n;
+    function pred(ms) { return intercept + slope * ((ms - t0) / DAY); }
+
+    var lastFiveMs = Date.parse(use[use.length - 1].x);
+    var facs = [];
+    h3.forEach(function (p) {
+      var ms = Date.parse(p.x);
+      if ((ms - lastFiveMs) / DAY > windowDays) return;   /* extrapolation past the window is unreliable */
+      var e5 = pred(ms);
+      if (e5 > 0) facs.push(p.y / e5);
+    });
+    if (facs.length < 2) return { factor: def, source: 'default', n: facs.length };
+
+    facs.sort(function (a, b) { return a - b; });
+    var m = facs.length >> 1;
+    var med = facs.length % 2 ? facs[m] : (facs[m - 1] + facs[m]) / 2;
+    med = Math.max(lo, Math.min(hi, med));
+    return { factor: Math.round(med * 1000) / 1000, source: 'calibrated', n: facs.length };
+  }
+
   window.coneHistory = coneHistory;
   window.buildConeProjection = buildConeProjection;
+  window.estimateDurationFactor = estimateDurationFactor;
 })();
