@@ -101,7 +101,8 @@
   const TOMBSTONE_TTL_DAYS = 90;
   function liveTombstones(tombs) {
     const cutoff = new Date(Date.now() - TOMBSTONE_TTL_DAYS * 86400000).toISOString();
-    return (tombs || []).filter(t => (t.deletedAt || '') >= cutoff);
+    return (Array.isArray(tombs) ? tombs : [])
+      .filter(t => t && typeof t === 'object' && (t.deletedAt || '') >= cutoff);
   }
   // Drop expired tombstone rows from the local store (run after each sync).
   function gcTombstones() {
@@ -304,16 +305,28 @@
     });
   }
 
+  // Keep only records that can actually live in a keyed store. A single
+  // keyless/garbage row used to abort the WHOLE store's import transaction,
+  // so one corrupt record in a backup silently dropped every other record
+  // of that store. (Fuzz-hardened 2026-07-06.) Valid records import as before.
+  function sanitizeRecords(arr, keyField) {
+    return (Array.isArray(arr) ? arr : []).filter(r =>
+      r && typeof r === 'object' && !Array.isArray(r) &&
+      (typeof r[keyField] === 'string' || typeof r[keyField] === 'number') && r[keyField] !== '');
+  }
+  const TOMB_STORES = ['logEntries', 'workingMaxes', 'cycles', 'benchmarks', 'meta'];
+
   function importBackup(data) {
-    if (!data) return Promise.resolve();
-    const cleanMeta = (data.meta || []).filter(m => !LOCAL_META.includes(m.key));
-    const tombs = liveTombstones(data.tombstones);
+    if (!data || typeof data !== 'object') return Promise.resolve();
+    const cleanMeta = sanitizeRecords(data.meta, 'key').filter(m => !LOCAL_META.includes(m.key));
+    const tombs = liveTombstones(sanitizeRecords(data.tombstones, 'id'))
+      .filter(t => TOMB_STORES.indexOf(t.store) >= 0);
     // One transaction per store (not per record).
     return Promise.all([
-      putAll('logEntries', data.logEntries || []),
-      putAll('workingMaxes', data.workingMaxes || []),
-      putAll('cycles', data.cycles || []),
-      putAll('benchmarks', data.benchmarks || []),
+      putAll('logEntries', sanitizeRecords(data.logEntries, 'id')),
+      putAll('workingMaxes', sanitizeRecords(data.workingMaxes, 'id')),
+      putAll('cycles', sanitizeRecords(data.cycles, 'id')),
+      putAll('benchmarks', sanitizeRecords(data.benchmarks, 'id')),
       putAll('meta', cleanMeta),
       putAll('tombstones', tombs)
     ]).then(() => {

@@ -13,7 +13,14 @@
       else if (k.startsWith('on') && typeof attrs[k] === 'function') n.addEventListener(k.slice(2), attrs[k]);
       else if (attrs[k] != null) n.setAttribute(k, attrs[k]);
     }
-    (children || []).forEach(c => n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
+    // Children are coerced defensively (fuzz-hardened 2026-07-06): a corrupt
+    // record with e.g. an object in `notes` used to reach appendChild and
+    // kill the whole tab. null/undefined are skipped; non-nodes render as text.
+    (children || []).forEach(c => {
+      if (c == null) return;
+      if (typeof c === 'string') { n.appendChild(document.createTextNode(c)); return; }
+      n.appendChild(c && typeof c === 'object' && c.nodeType ? c : document.createTextNode(String(c)));
+    });
     return n;
   }
   const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
@@ -736,15 +743,45 @@
     const cycStart = cycle ? cycle.startDate : null;
     const benches = (await DB.getAll('benchmarks')).sort((a, b) => (a.date < b.date ? -1 : 1));
 
+    // ---- personal RPE→%max curve (display-only; rpe_cal.js) -------------
+    // When the athlete's own RPE spacing validates out-of-sample (strict
+    // gate inside fitRpeCurve), every Analytics series below is recomputed
+    // through it from load+RPE. Stored e1rmKg, WMs, anchors, and all
+    // training math stay on the generic table — calc.js is untouched.
+    const rpePts = yielding
+      .filter(l => l.topSetLoadKg != null && l.topSetRPE != null)
+      .map(l => ({ date: l.date, load: l.topSetLoadKg, rpe: l.topSetRPE, dur: l.hangDurationSeconds }));
+    benches.forEach(b => {
+      if (b.maxLoadKg != null && b.rpe != null) rpePts.push({ date: b.date, load: b.maxLoadKg, rpe: b.rpe, dur: b.durationSeconds });
+    });
+    const rpeCal = (typeof fitRpeCurve === 'function') ? fitRpeCurve(rpePts) : { k: 0.06, source: 'default', n: 0 };
+    const calOn = rpeCal.source === 'calibrated';
+    // 5s-equivalent E1RM (3s ÷1.1, same pipeline as calc.js) — personal curve
+    // when calibrated + inputs exist, else the stored value.
+    const pE1eq = (l) => {
+      if (calOn && l.topSetLoadKg != null && l.topSetRPE != null) {
+        const v = rpeCal.e1rm(l.topSetLoadKg, l.topSetRPE, l.hangDurationSeconds);
+        if (v != null) return v;
+      }
+      return l.e1rmKg;
+    };
+    // Raw 3s E1RM: duration passed as 5 skips the ÷1.1 5s-normalisation
+    const pE1raw3 = (l) => {
+      if (calOn && l.topSetLoadKg != null && l.topSetRPE != null) {
+        const v = rpeCal.e1rm(l.topSetLoadKg, l.topSetRPE, 5);
+        if (v != null) return v;
+      }
+      return l.topSetLoadKg != null ? Calc.e1rm(l.topSetLoadKg, l.topSetRPE, 5) : Calc.roundTo(l.e1rmKg * 1.1, 1);
+    };
+
     // series: per-session for the cycle view, per-benchmark for all-time
-    const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: l.e1rmKg }));
-    const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: l.e1rmKg }));
+    const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: pE1eq(l) }));
+    const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: pE1eq(l) }));
     const inCyc = p => !cycStart || p.x >= cycStart;
     const s5cyc = s5all.filter(inCyc), s3cyc = s3all.filter(inCyc);
-    // Raw 3s E1RM: duration passed as 5 skips the ÷1.1 5s-normalisation
     const s3raw = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({
       x: l.date,
-      y: l.topSetLoadKg != null ? Calc.e1rm(l.topSetLoadKg, l.topSetRPE, 5) : Calc.roundTo(l.e1rmKg * 1.1, 1)
+      y: pE1raw3(l)
     }));
     const isAll = App.state.analyticsRange === 'all';
     const r5 = isAll ? s5all : s5cyc;      // 5s sessions
@@ -781,7 +818,10 @@
         { pts: combined, color: '#3D87F5', name: '5s hang', trendColor: '#3D87F5' }
       ], 'kg', { movingAvg: true, prMarkers: true }));
       hero.appendChild(el('p', { class: 'card-note', style: 'margin:4px 0 0' },
-        ['solid = 5s hangs · dashed/hollow = 3s hangs (5s-eq) · thin = trend']));
+        ['solid = 5s hangs · dashed/hollow = 3s hangs (5s-eq) · thin = trend · ' +
+         (calOn
+           ? `RPE curve: personal, ${(rpeCal.k * 100).toFixed(1)}%/pt (n=${rpeCal.n}, holds up out-of-sample) — applied to all Analytics series`
+           : 'RPE curve: generic 6%/pt (personal curve needs more sessions with varied RPE)')]));
     } else {
       hero.appendChild(el('p', { class: 'muted', style: 'margin:8px 0' }, ['Log Yielding sessions with load + RPE to build this chart.']));
     }
@@ -871,6 +911,7 @@
     logs.forEach(l => {
       if (l.type !== 'Yielding' || l.topSetLoadKg == null || !l.sets) return;
       const wk = isoWeekKey(l.date);
+      if (!wk) return;
       byWeek[wk] = (byWeek[wk] || 0) + l.topSetLoadKg * l.sets;
     });
     const wkKeys = Object.keys(byWeek).sort().slice(-8);
@@ -1020,6 +1061,7 @@
 
   function isoWeekKey(iso) {
     const d = new Date(iso + 'T00:00:00');
+    if (!isFinite(d.getTime())) return null;   // corrupt date: skip, don't throw
     const day = (d.getDay() + 6) % 7; // Mon=0
     d.setDate(d.getDate() - day);
     return d.toISOString().slice(0, 10);

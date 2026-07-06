@@ -1,0 +1,440 @@
+build	Set up job	﻿2026-07-06T10:11:00.8445245Z Current runner version: '2.335.1'
+build	Set up job	2026-07-06T10:11:00.8471941Z ##[group]Runner Image Provisioner
+build	Set up job	2026-07-06T10:11:00.8473272Z Hosted Compute Agent
+build	Set up job	2026-07-06T10:11:00.8473967Z Version: 20260624.560
+build	Set up job	2026-07-06T10:11:00.8474608Z Commit: 925d229a51159bc391ae97e54a2dd1fe20af789d
+build	Set up job	2026-07-06T10:11:00.8475322Z Build Date: 2026-06-24T18:26:47Z
+build	Set up job	2026-07-06T10:11:00.8476046Z Worker ID: {489c831b-4bca-4383-a3ef-e4476c293ab3}
+build	Set up job	2026-07-06T10:11:00.8476746Z Azure Region: westus2
+build	Set up job	2026-07-06T10:11:00.8477293Z ##[endgroup]
+build	Set up job	2026-07-06T10:11:00.8478869Z ##[group]Operating System
+build	Set up job	2026-07-06T10:11:00.8479506Z Ubuntu
+build	Set up job	2026-07-06T10:11:00.8480070Z 24.04.4
+build	Set up job	2026-07-06T10:11:00.8480585Z LTS
+build	Set up job	2026-07-06T10:11:00.8481079Z ##[endgroup]
+build	Set up job	2026-07-06T10:11:00.8481688Z ##[group]Runner Image
+build	Set up job	2026-07-06T10:11:00.8482510Z Image: ubuntu-24.04
+build	Set up job	2026-07-06T10:11:00.8483052Z Version: 20260628.225.1
+build	Set up job	2026-07-06T10:11:00.8484171Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260628.225/images/ubuntu/Ubuntu2404-Readme.md
+build	Set up job	2026-07-06T10:11:00.8485950Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260628.225
+build	Set up job	2026-07-06T10:11:00.8486892Z ##[endgroup]
+build	Set up job	2026-07-06T10:11:00.8488040Z ##[group]GITHUB_TOKEN Permissions
+build	Set up job	2026-07-06T10:11:00.8489920Z Contents: read
+build	Set up job	2026-07-06T10:11:00.8490554Z Metadata: read
+build	Set up job	2026-07-06T10:11:00.8491206Z Pages: write
+build	Set up job	2026-07-06T10:11:00.8491745Z ##[endgroup]
+build	Set up job	2026-07-06T10:11:00.8494353Z Secret source: Actions
+build	Set up job	2026-07-06T10:11:00.8495446Z Prepare workflow directory
+build	Set up job	2026-07-06T10:11:00.8839429Z Prepare all required actions
+build	Set up job	2026-07-06T10:11:00.8882954Z Getting action download info
+build	Set up job	2026-07-06T10:11:01.3058746Z Download action repository 'actions/checkout@v4' (SHA:34e114876b0b11c390a56381ad16ebd13914f8d5)
+build	Set up job	2026-07-06T10:11:01.5432776Z Download action repository 'actions/jekyll-build-pages@v1' (SHA:44a6e6beabd48582f863aeeb6cb2151cc1716697)
+build	Set up job	2026-07-06T10:11:01.8123642Z Download action repository 'actions/upload-pages-artifact@v3' (SHA:56afc609e74202658d3ffba0e8f6dda462b719fa)
+build	Set up job	2026-07-06T10:11:02.0814750Z Getting action download info
+build	Set up job	2026-07-06T10:11:02.3396180Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+build	Set up job	2026-07-06T10:11:02.4890622Z Complete job name: build
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	﻿2026-07-06T10:11:02.5421798Z ##[group]Pull down action image 'ghcr.io/actions/jekyll-build-pages:v1.0.13'
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:02.5930415Z ##[command]/usr/bin/docker pull ghcr.io/actions/jekyll-build-pages:v1.0.13
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3025065Z v1.0.13: Pulling from actions/jekyll-build-pages
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3059535Z efc2b5ad9eec: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3060537Z 165b60d1bb48: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3061231Z 2a328af1ca3a: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3061979Z 32b58fa44788: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3063027Z 590ab93c22d2: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3063720Z 26ea96c4c14c: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3064322Z bd7e451dfea1: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3064753Z c209e9dadc51: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3065201Z a4925b5c711a: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3065600Z cd9459784e3c: Pulling fs layer
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3066018Z 26ea96c4c14c: Waiting
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3066378Z 32b58fa44788: Waiting
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3066741Z bd7e451dfea1: Waiting
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3067156Z 590ab93c22d2: Waiting
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3067525Z c209e9dadc51: Waiting
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3067886Z a4925b5c711a: Waiting
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.3068239Z cd9459784e3c: Waiting
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.4370157Z 2a328af1ca3a: Verifying Checksum
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.4371114Z 2a328af1ca3a: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.5326667Z 165b60d1bb48: Verifying Checksum
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.5328071Z 165b60d1bb48: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.6005120Z efc2b5ad9eec: Verifying Checksum
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.6006314Z efc2b5ad9eec: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.6748164Z 590ab93c22d2: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.7443331Z 32b58fa44788: Verifying Checksum
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.7444925Z 32b58fa44788: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:04.8169245Z bd7e451dfea1: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:05.0031904Z a4925b5c711a: Verifying Checksum
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:05.0034998Z a4925b5c711a: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:05.0710716Z c209e9dadc51: Verifying Checksum
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:05.0711330Z c209e9dadc51: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:05.1559168Z cd9459784e3c: Verifying Checksum
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:05.1560809Z cd9459784e3c: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:05.3515724Z 26ea96c4c14c: Verifying Checksum
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:05.3516197Z 26ea96c4c14c: Download complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:05.9907093Z efc2b5ad9eec: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:08.3769531Z 165b60d1bb48: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:08.3912049Z 2a328af1ca3a: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:09.4183928Z 32b58fa44788: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:09.4335855Z 590ab93c22d2: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:13.6766327Z 26ea96c4c14c: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:13.6879711Z bd7e451dfea1: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:15.8407869Z c209e9dadc51: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:15.8674986Z a4925b5c711a: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:15.8794118Z cd9459784e3c: Pull complete
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:15.8831393Z Digest: sha256:6791ebfd912185ed59bfb5fb102664fa872496b79f87ff8b9cfba292a7345041
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:15.8847596Z Status: Downloaded newer image for ghcr.io/actions/jekyll-build-pages:v1.0.13
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:15.8856952Z ghcr.io/actions/jekyll-build-pages:v1.0.13
+build	Pull ghcr.io/actions/jekyll-build-pages:v1.0.13	2026-07-06T10:11:15.8879850Z ##[endgroup]
+build	Checkout	﻿2026-07-06T10:11:15.9201783Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+build	Checkout	2026-07-06T10:11:15.9210368Z ##[group]Run actions/checkout@v4
+build	Checkout	2026-07-06T10:11:15.9210847Z with:
+build	Checkout	2026-07-06T10:11:15.9211076Z   ref: main
+build	Checkout	2026-07-06T10:11:15.9211297Z   submodules: recursive
+build	Checkout	2026-07-06T10:11:15.9211540Z   repository: martil2105/finger-trainer
+build	Checkout	2026-07-06T10:11:15.9214583Z   token: ***
+build	Checkout	2026-07-06T10:11:15.9214800Z   ssh-strict: true
+build	Checkout	2026-07-06T10:11:15.9214999Z   ssh-user: git
+build	Checkout	2026-07-06T10:11:15.9215204Z   persist-credentials: true
+build	Checkout	2026-07-06T10:11:15.9215438Z   clean: true
+build	Checkout	2026-07-06T10:11:15.9215642Z   sparse-checkout-cone-mode: true
+build	Checkout	2026-07-06T10:11:15.9215893Z   fetch-depth: 1
+build	Checkout	2026-07-06T10:11:15.9216086Z   fetch-tags: false
+build	Checkout	2026-07-06T10:11:15.9216289Z   show-progress: true
+build	Checkout	2026-07-06T10:11:15.9216534Z   lfs: false
+build	Checkout	2026-07-06T10:11:15.9216719Z   set-safe-directory: true
+build	Checkout	2026-07-06T10:11:15.9217195Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.0303046Z Syncing repository: martil2105/finger-trainer
+build	Checkout	2026-07-06T10:11:16.0305042Z ##[group]Getting Git version info
+build	Checkout	2026-07-06T10:11:16.0305798Z Working directory is '/home/runner/work/finger-trainer/finger-trainer'
+build	Checkout	2026-07-06T10:11:16.0306862Z [command]/usr/bin/git version
+build	Checkout	2026-07-06T10:11:16.0414460Z git version 2.54.0
+build	Checkout	2026-07-06T10:11:16.0441713Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.0459105Z Temporarily overriding HOME='/home/runner/work/_temp/ed53a10b-1432-4b90-a33a-8e2e57df83bb' before making global git config changes
+build	Checkout	2026-07-06T10:11:16.0460805Z Adding repository directory to the temporary git global config as a safe directory
+build	Checkout	2026-07-06T10:11:16.0465087Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/finger-trainer/finger-trainer
+build	Checkout	2026-07-06T10:11:16.0527187Z Deleting the contents of '/home/runner/work/finger-trainer/finger-trainer'
+build	Checkout	2026-07-06T10:11:16.0530939Z ##[group]Initializing the repository
+build	Checkout	2026-07-06T10:11:16.0538508Z [command]/usr/bin/git init /home/runner/work/finger-trainer/finger-trainer
+build	Checkout	2026-07-06T10:11:16.0684023Z hint: Using 'master' as the name for the initial branch. This default branch name
+build	Checkout	2026-07-06T10:11:16.0684814Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+build	Checkout	2026-07-06T10:11:16.0685370Z hint: to use in all of your new repositories, which will suppress this warning,
+build	Checkout	2026-07-06T10:11:16.0685762Z hint: call:
+build	Checkout	2026-07-06T10:11:16.0685948Z hint:
+build	Checkout	2026-07-06T10:11:16.0686505Z hint: 	git config --global init.defaultBranch <name>
+build	Checkout	2026-07-06T10:11:16.0686829Z hint:
+build	Checkout	2026-07-06T10:11:16.0687272Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+build	Checkout	2026-07-06T10:11:16.0688254Z hint: 'development'. The just-created branch can be renamed via this command:
+build	Checkout	2026-07-06T10:11:16.0688966Z hint:
+build	Checkout	2026-07-06T10:11:16.0689322Z hint: 	git branch -m <name>
+build	Checkout	2026-07-06T10:11:16.0689772Z hint:
+build	Checkout	2026-07-06T10:11:16.0690320Z hint: Disable this message with "git config set advice.defaultBranchName false"
+build	Checkout	2026-07-06T10:11:16.0694914Z Initialized empty Git repository in /home/runner/work/finger-trainer/finger-trainer/.git/
+build	Checkout	2026-07-06T10:11:16.0705363Z [command]/usr/bin/git remote add origin https://github.com/martil2105/finger-trainer
+build	Checkout	2026-07-06T10:11:16.0764412Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.0764846Z ##[group]Disabling automatic garbage collection
+build	Checkout	2026-07-06T10:11:16.0769598Z [command]/usr/bin/git config --local gc.auto 0
+build	Checkout	2026-07-06T10:11:16.0802591Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.0803025Z ##[group]Setting up auth
+build	Checkout	2026-07-06T10:11:16.0811829Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+build	Checkout	2026-07-06T10:11:16.0862025Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+build	Checkout	2026-07-06T10:11:16.1305693Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+build	Checkout	2026-07-06T10:11:16.1343193Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+build	Checkout	2026-07-06T10:11:16.1579529Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+build	Checkout	2026-07-06T10:11:16.1618660Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+build	Checkout	2026-07-06T10:11:16.1856258Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+build	Checkout	2026-07-06T10:11:16.1905880Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.1907218Z ##[group]Fetching the repository
+build	Checkout	2026-07-06T10:11:16.1921210Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +refs/heads/main*:refs/remotes/origin/main* +refs/tags/main*:refs/tags/main*
+build	Checkout	2026-07-06T10:11:16.7211753Z From https://github.com/martil2105/finger-trainer
+build	Checkout	2026-07-06T10:11:16.7212815Z  * [new branch]      main       -> origin/main
+build	Checkout	2026-07-06T10:11:16.7255636Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.7333270Z ##[group]Determining the checkout info
+build	Checkout	2026-07-06T10:11:16.7337267Z [command]/usr/bin/git branch --list --remote origin/main
+build	Checkout	2026-07-06T10:11:16.7337646Z   origin/main
+build	Checkout	2026-07-06T10:11:16.7338485Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.7338724Z [command]/usr/bin/git sparse-checkout disable
+build	Checkout	2026-07-06T10:11:16.7366101Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+build	Checkout	2026-07-06T10:11:16.7404072Z ##[group]Checking out the ref
+build	Checkout	2026-07-06T10:11:16.7408003Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+build	Checkout	2026-07-06T10:11:16.7503320Z Switched to a new branch 'main'
+build	Checkout	2026-07-06T10:11:16.7505774Z branch 'main' set up to track 'origin/main'.
+build	Checkout	2026-07-06T10:11:16.7511453Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.7511931Z ##[group]Setting up auth for fetching submodules
+build	Checkout	2026-07-06T10:11:16.7517823Z [command]/usr/bin/git config --global http.https://github.com/.extraheader AUTHORIZATION: basic ***
+build	Checkout	2026-07-06T10:11:16.7561856Z [command]/usr/bin/git config --global --unset-all url.https://github.com/.insteadOf
+build	Checkout	2026-07-06T10:11:16.7596572Z [command]/usr/bin/git config --global --add url.https://github.com/.insteadOf git@github.com:
+build	Checkout	2026-07-06T10:11:16.7631478Z [command]/usr/bin/git config --global --add url.https://github.com/.insteadOf org-89769938@github.com:
+build	Checkout	2026-07-06T10:11:16.7662699Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.7663447Z ##[group]Fetching submodules
+build	Checkout	2026-07-06T10:11:16.7667213Z [command]/usr/bin/git submodule sync --recursive
+build	Checkout	2026-07-06T10:11:16.7904323Z [command]/usr/bin/git -c protocol.version=2 submodule update --init --force --depth=1 --recursive
+build	Checkout	2026-07-06T10:11:16.8139139Z [command]/usr/bin/git submodule foreach --recursive git config --local gc.auto 0
+build	Checkout	2026-07-06T10:11:16.8366983Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.8367711Z ##[group]Persisting credentials for submodules
+build	Checkout	2026-07-06T10:11:16.8374640Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'url\.https\:\/\/github\.com\/\.insteadOf' && git config --local --unset-all 'url.https://github.com/.insteadOf' || :"
+build	Checkout	2026-07-06T10:11:16.8608478Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local 'http.https://github.com/.extraheader' 'AUTHORIZATION: basic ***' && git config --local --show-origin --name-only --get-regexp remote.origin.url"
+build	Checkout	2026-07-06T10:11:16.8847721Z [command]/usr/bin/git submodule foreach --recursive git config --local --add 'url.https://github.com/.insteadOf' 'git@github.com:'
+build	Checkout	2026-07-06T10:11:16.9081887Z [command]/usr/bin/git submodule foreach --recursive git config --local --add 'url.https://github.com/.insteadOf' 'org-89769938@github.com:'
+build	Checkout	2026-07-06T10:11:16.9310082Z ##[endgroup]
+build	Checkout	2026-07-06T10:11:16.9359001Z [command]/usr/bin/git log -1 --format=%H
+build	Checkout	2026-07-06T10:11:16.9389163Z 835153844ff5a47f8443a5627ed8180f7db99ccb
+build	Build with Jekyll	﻿2026-07-06T10:11:16.9588008Z ##[group]Run actions/jekyll-build-pages@v1
+build	Build with Jekyll	2026-07-06T10:11:16.9588337Z with:
+build	Build with Jekyll	2026-07-06T10:11:16.9588527Z   source: .
+build	Build with Jekyll	2026-07-06T10:11:16.9588722Z   destination: ./_site
+build	Build with Jekyll	2026-07-06T10:11:16.9588935Z   future: false
+build	Build with Jekyll	2026-07-06T10:11:16.9589186Z   build_revision: 835153844ff5a47f8443a5627ed8180f7db99ccb
+build	Build with Jekyll	2026-07-06T10:11:16.9589489Z   verbose: true
+build	Build with Jekyll	2026-07-06T10:11:16.9592458Z   token: ***
+build	Build with Jekyll	2026-07-06T10:11:16.9592677Z ##[endgroup]
+build	Build with Jekyll	2026-07-06T10:11:16.9689734Z ##[command]/usr/bin/docker run --name ghcrioactionsjekyllbuildpagesv1013_e040ca --label 2d2e19 --workdir /github/workspace --rm -e "INPUT_SOURCE" -e "INPUT_DESTINATION" -e "INPUT_FUTURE" -e "INPUT_BUILD_REVISION" -e "INPUT_VERBOSE" -e "INPUT_TOKEN" -e "HOME" -e "GITHUB_JOB" -e "GITHUB_REF" -e "GITHUB_SHA" -e "GITHUB_REPOSITORY" -e "GITHUB_REPOSITORY_OWNER" -e "GITHUB_REPOSITORY_OWNER_ID" -e "GITHUB_RUN_ID" -e "GITHUB_RUN_NUMBER" -e "GITHUB_RETENTION_DAYS" -e "GITHUB_RUN_ATTEMPT" -e "GITHUB_ACTOR_ID" -e "GITHUB_ACTOR" -e "GITHUB_WORKFLOW" -e "GITHUB_HEAD_REF" -e "GITHUB_BASE_REF" -e "GITHUB_EVENT_NAME" -e "GITHUB_SERVER_URL" -e "GITHUB_API_URL" -e "GITHUB_GRAPHQL_URL" -e "GITHUB_REF_NAME" -e "GITHUB_REF_PROTECTED" -e "GITHUB_REF_TYPE" -e "GITHUB_WORKFLOW_REF" -e "GITHUB_WORKFLOW_SHA" -e "GITHUB_REPOSITORY_ID" -e "GITHUB_TRIGGERING_ACTOR" -e "GITHUB_WORKSPACE" -e "GITHUB_ACTION" -e "GITHUB_EVENT_PATH" -e "GITHUB_ACTION_REPOSITORY" -e "GITHUB_ACTION_REF" -e "GITHUB_PATH" -e "GITHUB_ENV" -e "GITHUB_STEP_SUMMARY" -e "GITHUB_STATE" -e "GITHUB_OUTPUT" -e "RUNNER_OS" -e "RUNNER_ARCH" -e "RUNNER_NAME" -e "RUNNER_ENVIRONMENT" -e "RUNNER_TOOL_CACHE" -e "RUNNER_TEMP" -e "RUNNER_WORKSPACE" -e "ACTIONS_RUNTIME_URL" -e "ACTIONS_RUNTIME_TOKEN" -e "ACTIONS_CACHE_URL" -e "ACTIONS_ID_TOKEN_REQUEST_URL" -e "ACTIONS_ID_TOKEN_REQUEST_TOKEN" -e "ACTIONS_RESULTS_URL" -e "ACTIONS_ORCHESTRATION_ID" -e GITHUB_ACTIONS=true -e CI=true -v "/var/run/docker.sock":"/var/run/docker.sock" -v "/home/runner/work/_temp":"/github/runner_temp" -v "/home/runner/work/_temp/_github_home":"/github/home" -v "/home/runner/work/_temp/_github_workflow":"/github/workflow" -v "/home/runner/work/_temp/_runner_file_commands":"/github/file_commands" -v "/home/runner/work/finger-trainer/finger-trainer":"/github/workspace" ghcr.io/actions/jekyll-build-pages:v1.0.13
+build	Build with Jekyll	2026-07-06T10:11:18.1382858Z [33mConfiguration file: none[0m
+build	Build with Jekyll	2026-07-06T10:11:18.2572377Z To use retry middleware with Faraday v2.0+, install `faraday-retry` gem
+build	Build with Jekyll	2026-07-06T10:11:20.3401521Z   Logging at level: debug
+build	Build with Jekyll	2026-07-06T10:11:20.3402381Z       GitHub Pages: github-pages v232
+build	Build with Jekyll	2026-07-06T10:11:20.3403135Z       GitHub Pages: jekyll v3.10.0
+build	Build with Jekyll	2026-07-06T10:11:20.3403645Z              Theme: jekyll-theme-primer
+build	Build with Jekyll	2026-07-06T10:11:20.3404333Z       Theme source: /usr/local/bundle/gems/jekyll-theme-primer-0.6.0
+build	Build with Jekyll	2026-07-06T10:11:20.3405020Z          Requiring: jekyll-github-metadata
+build	Build with Jekyll	2026-07-06T10:11:20.3405562Z          Requiring: jekyll-seo-tag
+build	Build with Jekyll	2026-07-06T10:11:20.3406056Z          Requiring: jekyll-coffeescript
+build	Build with Jekyll	2026-07-06T10:11:20.3406562Z          Requiring: jekyll-commonmark-ghpages
+build	Build with Jekyll	2026-07-06T10:11:20.3407134Z          Requiring: jekyll-gist
+build	Build with Jekyll	2026-07-06T10:11:20.3407588Z          Requiring: jekyll-github-metadata
+build	Build with Jekyll	2026-07-06T10:11:20.3408060Z          Requiring: jekyll-paginate
+build	Build with Jekyll	2026-07-06T10:11:20.3408525Z          Requiring: jekyll-relative-links
+build	Build with Jekyll	2026-07-06T10:11:20.3409035Z          Requiring: jekyll-optional-front-matter
+build	Build with Jekyll	2026-07-06T10:11:20.3409540Z          Requiring: jekyll-readme-index
+build	Build with Jekyll	2026-07-06T10:11:20.3410003Z          Requiring: jekyll-default-layout
+build	Build with Jekyll	2026-07-06T10:11:20.3410523Z          Requiring: jekyll-titles-from-headings
+build	Build with Jekyll	2026-07-06T10:11:20.3411028Z    GitHub Metadata: Initializing...
+build	Build with Jekyll	2026-07-06T10:11:20.3411476Z             Source: /github/workspace/.
+build	Build with Jekyll	2026-07-06T10:11:20.3411955Z        Destination: /github/workspace/./_site
+build	Build with Jekyll	2026-07-06T10:11:20.3412747Z  Incremental build: disabled. Enable with --incremental
+build	Build with Jekyll	2026-07-06T10:11:20.3413184Z       Generating... 
+build	Build with Jekyll	2026-07-06T10:11:20.3417586Z         Generating: JekyllOptionalFrontMatter::Generator finished in 0.000274445 seconds.
+build	Build with Jekyll	2026-07-06T10:11:20.3419725Z         Generating: JekyllReadmeIndex::Generator finished in 0.00164091 seconds.
+build	Build with Jekyll	2026-07-06T10:11:20.3420632Z         Generating: Jekyll::Paginate::Pagination finished in 5.6e-06 seconds.
+build	Build with Jekyll	2026-07-06T10:11:20.3421553Z         Generating: JekyllRelativeLinks::Generator finished in 0.000799431 seconds.
+build	Build with Jekyll	2026-07-06T10:11:20.3423103Z         Generating: JekyllDefaultLayout::Generator finished in 7.211e-05 seconds.
+build	Build with Jekyll	2026-07-06T10:11:20.3424215Z          Requiring: kramdown-parser-gfm
+build	Build with Jekyll	2026-07-06T10:11:20.3425002Z         Generating: JekyllTitlesFromHeadings::Generator finished in 0.009079383 seconds.
+build	Build with Jekyll	2026-07-06T10:11:20.3425788Z          Rendering: assets/css/style.scss
+build	Build with Jekyll	2026-07-06T10:11:20.3426303Z   Pre-Render Hooks: assets/css/style.scss
+build	Build with Jekyll	2026-07-06T10:11:20.3426795Z   Rendering Markup: assets/css/style.scss
+build	Build with Jekyll	2026-07-06T10:11:20.3427341Z          Rendering: KALMAN_DISPLAY_PROMPT.md
+build	Build with Jekyll	2026-07-06T10:11:20.3427883Z   Pre-Render Hooks: KALMAN_DISPLAY_PROMPT.md
+build	Build with Jekyll	2026-07-06T10:11:20.3428443Z   Rendering Markup: KALMAN_DISPLAY_PROMPT.md
+build	Build with Jekyll	2026-07-06T10:11:20.3429023Z   Rendering Layout: KALMAN_DISPLAY_PROMPT.md
+build	Build with Jekyll	2026-07-06T10:11:20.3429550Z      Layout source: theme
+build	Build with Jekyll	2026-07-06T10:11:20.3430059Z    GitHub Metadata: Generating for martil2105/finger-trainer
+build	Build with Jekyll	2026-07-06T10:11:20.3431253Z    GitHub Metadata: Calling @client.repository("martil2105/finger-trainer", {:accept=>"application/vnd.github.drax-preview+json"})
+build	Build with Jekyll	2026-07-06T10:11:20.3432753Z    GitHub Metadata: Calling @client.pages("martil2105/finger-trainer", {})
+build	Build with Jekyll	2026-07-06T10:11:20.3433453Z          Rendering: current_cycle_report.md
+build	Build with Jekyll	2026-07-06T10:11:20.3433958Z   Pre-Render Hooks: current_cycle_report.md
+build	Build with Jekyll	2026-07-06T10:11:20.3434499Z   Rendering Markup: current_cycle_report.md
+build	Build with Jekyll	2026-07-06T10:11:20.3435019Z   Rendering Layout: current_cycle_report.md
+build	Build with Jekyll	2026-07-06T10:11:20.3435490Z      Layout source: theme
+build	Build with Jekyll	2026-07-06T10:11:20.3435982Z            Writing: /github/workspace/_site/assets/css/style.css
+build	Build with Jekyll	2026-07-06T10:11:20.3436764Z            Writing: /github/workspace/_site/KALMAN_DISPLAY_PROMPT.html
+build	Build with Jekyll	2026-07-06T10:11:20.3437486Z            Writing: /github/workspace/_site/current_cycle_report.html
+build	Build with Jekyll	2026-07-06T10:11:20.3438147Z                     done in 1.786 seconds.
+build	Build with Jekyll	2026-07-06T10:11:20.3438612Z  Auto-regeneration: disabled. Use --watch to enable.
+build	Upload artifact	﻿2026-07-06T10:11:20.4365942Z ##[group]Run actions/upload-pages-artifact@v3
+build	Upload artifact	2026-07-06T10:11:20.4366280Z with:
+build	Upload artifact	2026-07-06T10:11:20.4366471Z   path: ./_site
+build	Upload artifact	2026-07-06T10:11:20.4366674Z   name: github-pages
+build	Upload artifact	2026-07-06T10:11:20.4367070Z   retention-days: 1
+build	Upload artifact	2026-07-06T10:11:20.4367272Z ##[endgroup]
+build	Upload artifact	2026-07-06T10:11:20.4483453Z ##[group]Run echo ::group::Archive artifact
+build	Upload artifact	2026-07-06T10:11:20.4483851Z [36;1mecho ::group::Archive artifact[0m
+build	Upload artifact	2026-07-06T10:11:20.4484124Z [36;1mtar \[0m
+build	Upload artifact	2026-07-06T10:11:20.4484365Z [36;1m  --dereference --hard-dereference \[0m
+build	Upload artifact	2026-07-06T10:11:20.4484686Z [36;1m  --directory "$INPUT_PATH" \[0m
+build	Upload artifact	2026-07-06T10:11:20.4484984Z [36;1m  -cvf "$RUNNER_TEMP/artifact.tar" \[0m
+build	Upload artifact	2026-07-06T10:11:20.4485263Z [36;1m  --exclude=.git \[0m
+build	Upload artifact	2026-07-06T10:11:20.4485495Z [36;1m  --exclude=.github \[0m
+build	Upload artifact	2026-07-06T10:11:20.4485718Z [36;1m  .[0m
+build	Upload artifact	2026-07-06T10:11:20.4485933Z [36;1mecho ::endgroup::[0m
+build	Upload artifact	2026-07-06T10:11:20.5103078Z shell: /usr/bin/sh -e {0}
+build	Upload artifact	2026-07-06T10:11:20.5103412Z env:
+build	Upload artifact	2026-07-06T10:11:20.5103641Z   INPUT_PATH: ./_site
+build	Upload artifact	2026-07-06T10:11:20.5103948Z ##[endgroup]
+build	Upload artifact	2026-07-06T10:11:20.5204353Z ##[group]Archive artifact
+build	Upload artifact	2026-07-06T10:11:20.5218484Z ./
+build	Upload artifact	2026-07-06T10:11:20.5218992Z ./history_import.csv
+build	Upload artifact	2026-07-06T10:11:20.5219453Z ./sync.js
+build	Upload artifact	2026-07-06T10:11:20.5219796Z ./README.md
+build	Upload artifact	2026-07-06T10:11:20.5220117Z ./kalman.js
+build	Upload artifact	2026-07-06T10:11:20.5220435Z ./kalman_data.js
+build	Upload artifact	2026-07-06T10:11:20.5220769Z ./cone.js
+build	Upload artifact	2026-07-06T10:11:20.5221062Z ./timer.js
+build	Upload artifact	2026-07-06T10:11:20.5221383Z ./current_cycle_report.md
+build	Upload artifact	2026-07-06T10:11:20.5222042Z ./finger_training_tracker_v10.xlsx
+build	Upload artifact	2026-07-06T10:11:20.5222828Z ./assets/
+build	Upload artifact	2026-07-06T10:11:20.5223535Z ./assets/css/
+build	Upload artifact	2026-07-06T10:11:20.5224017Z ./assets/css/style.css
+build	Upload artifact	2026-07-06T10:11:20.5224636Z ./icons/
+build	Upload artifact	2026-07-06T10:11:20.5225063Z ./icons/icon-192.png
+build	Upload artifact	2026-07-06T10:11:20.5225652Z ./icons/icon-180.png
+build	Upload artifact	2026-07-06T10:11:20.5226370Z ./icons/icon-512.png
+build	Upload artifact	2026-07-06T10:11:20.5228730Z ./app.js
+build	Upload artifact	2026-07-06T10:11:20.5230070Z ./cone_data.js
+build	Upload artifact	2026-07-06T10:11:20.5230442Z ./report_cycle.js
+build	Upload artifact	2026-07-06T10:11:20.5230955Z ./current_cycle_report.html
+build	Upload artifact	2026-07-06T10:11:20.5231469Z ./test.html
+build	Upload artifact	2026-07-06T10:11:20.5231892Z ./test_runner.html
+build	Upload artifact	2026-07-06T10:11:20.5232608Z ./style.css
+build	Upload artifact	2026-07-06T10:11:20.5233027Z ./motion_demo.html
+build	Upload artifact	2026-07-06T10:11:20.5233482Z ./index.html
+build	Upload artifact	2026-07-06T10:11:20.5233916Z ./cone_demo.html
+build	Upload artifact	2026-07-06T10:11:20.5234355Z ./manifest.json
+build	Upload artifact	2026-07-06T10:11:20.5234793Z ./sw.js
+build	Upload artifact	2026-07-06T10:11:20.5235194Z ./builder.js
+build	Upload artifact	2026-07-06T10:11:20.5235617Z ./db.js
+build	Upload artifact	2026-07-06T10:11:20.5236016Z ./motion.css
+build	Upload artifact	2026-07-06T10:11:20.5236439Z ./templates.js
+build	Upload artifact	2026-07-06T10:11:20.5236904Z ./apple-touch-icon.png
+build	Upload artifact	2026-07-06T10:11:20.5237375Z ./KALMAN_DISPLAY_PROMPT.html
+build	Upload artifact	2026-07-06T10:11:20.5237851Z ./KALMAN_DISPLAY_PROMPT.md
+build	Upload artifact	2026-07-06T10:11:20.5238297Z ./motion.js
+build	Upload artifact	2026-07-06T10:11:20.5238664Z ./calc.js
+build	Upload artifact	2026-07-06T10:11:20.5239662Z ##[endgroup]
+build	Upload artifact	2026-07-06T10:11:20.5318770Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+build	Upload artifact	2026-07-06T10:11:20.5320650Z ##[group]Run actions/upload-artifact@v4
+build	Upload artifact	2026-07-06T10:11:20.5320919Z with:
+build	Upload artifact	2026-07-06T10:11:20.5321100Z   name: github-pages
+build	Upload artifact	2026-07-06T10:11:20.5321341Z   path: /home/runner/work/_temp/artifact.tar
+build	Upload artifact	2026-07-06T10:11:20.5321620Z   retention-days: 1
+build	Upload artifact	2026-07-06T10:11:20.5321829Z   if-no-files-found: error
+build	Upload artifact	2026-07-06T10:11:20.5322058Z   compression-level: 6
+build	Upload artifact	2026-07-06T10:11:20.5322462Z   overwrite: false
+build	Upload artifact	2026-07-06T10:11:20.5322698Z   include-hidden-files: false
+build	Upload artifact	2026-07-06T10:11:20.5322937Z ##[endgroup]
+build	Upload artifact	2026-07-06T10:11:20.7139444Z (node:2760) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+build	Upload artifact	2026-07-06T10:11:20.7140789Z (Use `node --trace-deprecation ...` to show where the warning was created)
+build	Upload artifact	2026-07-06T10:11:20.7193818Z With the provided path, there will be 1 file uploaded
+build	Upload artifact	2026-07-06T10:11:20.7212435Z Artifact name is valid!
+build	Upload artifact	2026-07-06T10:11:20.7213023Z Root directory input is valid!
+build	Upload artifact	2026-07-06T10:11:21.0688136Z Beginning upload of artifact content to blob storage
+build	Upload artifact	2026-07-06T10:11:21.1175137Z (node:2760) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+build	Upload artifact	2026-07-06T10:11:21.7568910Z Uploaded bytes 519756
+build	Upload artifact	2026-07-06T10:11:21.8380435Z Finished uploading artifact content to blob storage!
+build	Upload artifact	2026-07-06T10:11:21.8381547Z SHA256 digest of uploaded artifact zip is e12d6a97ad893888f724589482acf1d90eb30064813efd7e1d3ed0669e80a802
+build	Upload artifact	2026-07-06T10:11:21.8383056Z Finalizing artifact upload
+build	Upload artifact	2026-07-06T10:11:22.0783422Z Artifact github-pages.zip successfully finalized. Artifact ID 8105917515
+build	Upload artifact	2026-07-06T10:11:22.0785272Z Artifact github-pages has been successfully uploaded! Final size is 519756 bytes. Artifact ID is 8105917515
+build	Upload artifact	2026-07-06T10:11:22.0792909Z Artifact download URL: https://github.com/martil2105/finger-trainer/actions/runs/28784072485/artifacts/8105917515
+build	Post Checkout	﻿2026-07-06T10:11:22.1035326Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+build	Post Checkout	2026-07-06T10:11:22.1036620Z Post job cleanup.
+build	Post Checkout	2026-07-06T10:11:22.1877594Z [command]/usr/bin/git version
+build	Post Checkout	2026-07-06T10:11:22.1919443Z git version 2.54.0
+build	Post Checkout	2026-07-06T10:11:22.1994326Z Temporarily overriding HOME='/home/runner/work/_temp/a8583eb3-3dbc-4540-b0cb-c86b9f22e399' before making global git config changes
+build	Post Checkout	2026-07-06T10:11:22.1995763Z Adding repository directory to the temporary git global config as a safe directory
+build	Post Checkout	2026-07-06T10:11:22.2000915Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/finger-trainer/finger-trainer
+build	Post Checkout	2026-07-06T10:11:22.2043042Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+build	Post Checkout	2026-07-06T10:11:22.2085253Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+build	Post Checkout	2026-07-06T10:11:22.2347604Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+build	Post Checkout	2026-07-06T10:11:22.2378850Z http.https://github.com/.extraheader
+build	Post Checkout	2026-07-06T10:11:22.2390779Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+build	Post Checkout	2026-07-06T10:11:22.2433237Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+build	Post Checkout	2026-07-06T10:11:22.2701470Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+build	Post Checkout	2026-07-06T10:11:22.2744741Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+build	Complete job	﻿2026-07-06T10:11:22.3149934Z Cleaning up orphan processes
+build	Complete job	2026-07-06T10:11:22.4391924Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+deploy	Set up job	﻿2026-07-06T10:11:29.4232962Z Current runner version: '2.335.1'
+deploy	Set up job	2026-07-06T10:11:29.4259198Z ##[group]Runner Image Provisioner
+deploy	Set up job	2026-07-06T10:11:29.4260052Z Hosted Compute Agent
+deploy	Set up job	2026-07-06T10:11:29.4260582Z Version: 20260624.560
+deploy	Set up job	2026-07-06T10:11:29.4261142Z Commit: 925d229a51159bc391ae97e54a2dd1fe20af789d
+deploy	Set up job	2026-07-06T10:11:29.4261838Z Build Date: 2026-06-24T18:26:47Z
+deploy	Set up job	2026-07-06T10:11:29.4262484Z Worker ID: {bc28034e-58ef-4c62-acd3-79b101c99f9c}
+deploy	Set up job	2026-07-06T10:11:29.4263109Z Azure Region: westus3
+deploy	Set up job	2026-07-06T10:11:29.4264059Z ##[endgroup]
+deploy	Set up job	2026-07-06T10:11:29.4265496Z ##[group]Operating System
+deploy	Set up job	2026-07-06T10:11:29.4266127Z Ubuntu
+deploy	Set up job	2026-07-06T10:11:29.4266591Z 24.04.4
+deploy	Set up job	2026-07-06T10:11:29.4267043Z LTS
+deploy	Set up job	2026-07-06T10:11:29.4267519Z ##[endgroup]
+deploy	Set up job	2026-07-06T10:11:29.4267993Z ##[group]Runner Image
+deploy	Set up job	2026-07-06T10:11:29.4268518Z Image: ubuntu-24.04
+deploy	Set up job	2026-07-06T10:11:29.4269035Z Version: 20260628.225.1
+deploy	Set up job	2026-07-06T10:11:29.4269968Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260628.225/images/ubuntu/Ubuntu2404-Readme.md
+deploy	Set up job	2026-07-06T10:11:29.4271521Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260628.225
+deploy	Set up job	2026-07-06T10:11:29.4272358Z ##[endgroup]
+deploy	Set up job	2026-07-06T10:11:29.4273554Z ##[group]GITHUB_TOKEN Permissions
+deploy	Set up job	2026-07-06T10:11:29.4275480Z Contents: read
+deploy	Set up job	2026-07-06T10:11:29.4276092Z Metadata: read
+deploy	Set up job	2026-07-06T10:11:29.4276618Z Pages: write
+deploy	Set up job	2026-07-06T10:11:29.4277100Z ##[endgroup]
+deploy	Set up job	2026-07-06T10:11:29.4279292Z Secret source: Actions
+deploy	Set up job	2026-07-06T10:11:29.4280010Z Prepare workflow directory
+deploy	Set up job	2026-07-06T10:11:29.4663490Z Prepare all required actions
+deploy	Set up job	2026-07-06T10:11:29.4710660Z Getting action download info
+deploy	Set up job	2026-07-06T10:11:29.8051372Z Download action repository 'actions/deploy-pages@v5' (SHA:cd2ce8fcbc39b97be8ca5fce6e763baed58fa128)
+deploy	Set up job	2026-07-06T10:11:30.8776964Z Complete job name: deploy
+deploy	Deploy to GitHub Pages	﻿2026-07-06T10:11:30.9450545Z ##[group]Run actions/deploy-pages@v5
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:30.9451653Z with:
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:30.9456037Z   token: ***
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:30.9456600Z   timeout: 600000
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:30.9457145Z   error_count: 10
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:30.9457797Z   reporting_interval: 5000
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:30.9458435Z   artifact_name: github-pages
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:30.9459122Z   preview: false
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:30.9459972Z ##[endgroup]
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.1471183Z (node:2171) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.1472525Z (Use `node --trace-deprecation ...` to show where the warning was created)
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.3530159Z Fetching artifact metadata for "github-pages" in this workflow run
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.5858394Z Found 1 artifact(s)
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.5869821Z Creating Pages deployment with payload:
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.5870823Z {
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.5871286Z 	"artifact_id": 8105917515,
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.5872062Z 	"pages_build_version": "835153844ff5a47f8443a5627ed8180f7db99ccb",
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.5914540Z 	"oidc_token": "***"
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.5915173Z }
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:31.9533212Z Created deployment for 835153844ff5a47f8443a5627ed8180f7db99ccb, ID: 835153844ff5a47f8443a5627ed8180f7db99ccb
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:36.9557070Z Getting Pages deployment status...
+deploy	Deploy to GitHub Pages	2026-07-06T10:11:37.2363073Z ##[error]Deployment failed, try again later.
+deploy	Complete job	﻿2026-07-06T10:11:37.2611117Z Evaluate and set environment url
+deploy	Complete job	2026-07-06T10:11:37.2617084Z Evaluated environment url: https://martil2105.github.io/finger-trainer/
+deploy	Complete job	2026-07-06T10:11:37.2618365Z Cleaning up orphan processes
+report-build-status	Set up job	﻿2026-07-06T10:11:27.8765283Z Current runner version: '2.335.1'
+report-build-status	Set up job	2026-07-06T10:11:27.8792325Z ##[group]Runner Image Provisioner
+report-build-status	Set up job	2026-07-06T10:11:27.8793327Z Hosted Compute Agent
+report-build-status	Set up job	2026-07-06T10:11:27.8793915Z Version: 20260624.560
+report-build-status	Set up job	2026-07-06T10:11:27.8794516Z Commit: 925d229a51159bc391ae97e54a2dd1fe20af789d
+report-build-status	Set up job	2026-07-06T10:11:27.8795346Z Build Date: 2026-06-24T18:26:47Z
+report-build-status	Set up job	2026-07-06T10:11:27.8796024Z Worker ID: {d300156b-cbc2-4c57-b001-730f3b910ac5}
+report-build-status	Set up job	2026-07-06T10:11:27.8796748Z Azure Region: eastus
+report-build-status	Set up job	2026-07-06T10:11:27.8797361Z ##[endgroup]
+report-build-status	Set up job	2026-07-06T10:11:27.8799130Z ##[group]Operating System
+report-build-status	Set up job	2026-07-06T10:11:27.8799923Z Ubuntu
+report-build-status	Set up job	2026-07-06T10:11:27.8800477Z 24.04.4
+report-build-status	Set up job	2026-07-06T10:11:27.8801014Z LTS
+report-build-status	Set up job	2026-07-06T10:11:27.8801534Z ##[endgroup]
+report-build-status	Set up job	2026-07-06T10:11:27.8802046Z ##[group]Runner Image
+report-build-status	Set up job	2026-07-06T10:11:27.8802722Z Image: ubuntu-24.04
+report-build-status	Set up job	2026-07-06T10:11:27.8803327Z Version: 20260628.225.1
+report-build-status	Set up job	2026-07-06T10:11:27.8804360Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260628.225/images/ubuntu/Ubuntu2404-Readme.md
+report-build-status	Set up job	2026-07-06T10:11:27.8806131Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260628.225
+report-build-status	Set up job	2026-07-06T10:11:27.8807121Z ##[endgroup]
+report-build-status	Set up job	2026-07-06T10:11:27.8808344Z ##[group]GITHUB_TOKEN Permissions
+report-build-status	Set up job	2026-07-06T10:11:27.8810548Z Contents: read
+report-build-status	Set up job	2026-07-06T10:11:27.8811160Z Metadata: read
+report-build-status	Set up job	2026-07-06T10:11:27.8811690Z Pages: write
+report-build-status	Set up job	2026-07-06T10:11:27.8812342Z ##[endgroup]
+report-build-status	Set up job	2026-07-06T10:11:27.8814583Z Secret source: Actions
+report-build-status	Set up job	2026-07-06T10:11:27.8815597Z Prepare workflow directory
+report-build-status	Set up job	2026-07-06T10:11:27.9159561Z Prepare all required actions
+report-build-status	Set up job	2026-07-06T10:11:27.9258897Z Complete job name: report-build-status
+report-build-status	Report Build Status	﻿2026-07-06T10:11:28.4827666Z ##[group]Run gh api -X POST "repos/$GITHUB_REPOSITORY/pages/telemetry" \
+report-build-status	Report Build Status	2026-07-06T10:11:28.4829207Z [36;1mgh api -X POST "repos/$GITHUB_REPOSITORY/pages/telemetry" \[0m
+report-build-status	Report Build Status	2026-07-06T10:11:28.4830157Z [36;1m  -F github_run_id="$GITHUB_RUN_ID" \[0m
+report-build-status	Report Build Status	2026-07-06T10:11:28.4831011Z [36;1m  -F conclusion="$CONCLUSION"[0m
+report-build-status	Report Build Status	2026-07-06T10:11:28.5514799Z shell: /usr/bin/bash -e {0}
+report-build-status	Report Build Status	2026-07-06T10:11:28.5516132Z env:
+report-build-status	Report Build Status	2026-07-06T10:11:28.5522047Z   GITHUB_TOKEN: ***
+report-build-status	Report Build Status	2026-07-06T10:11:28.5522880Z   CONCLUSION: success
+report-build-status	Report Build Status	2026-07-06T10:11:28.5523526Z ##[endgroup]
+report-build-status	Report Build Status	2026-07-06T10:11:28.9122994Z {}
+report-build-status	Complete job	﻿2026-07-06T10:11:28.9378747Z Cleaning up orphan processes

@@ -71,7 +71,13 @@
   // ---- 6.3 Block -> week expansion -------------------------------------
   // Returns array of per-week prescriptions for a single block.
   function expandBlock(block, weekOffset, startDateISO) {
-    const N = block.durationWeeks;
+    // Defensive (fuzz-hardened 2026-07-06): a block missing `heavy` or with a
+    // junk durationWeeks used to throw and kill Today/Program/Analytics AND
+    // silently break manual-log saves (via blockNameFor). Corrupt weeks are
+    // clamped to zero; a missing heavy prescription falls back to sane
+    // defaults. Valid blocks are expanded exactly as before.
+    const N = Math.max(0, Math.floor(+block.durationWeeks) || 0);
+    const hv = block.heavy || {};
     const weeks = [];
     for (let i = 0; i < N; i++) {
       const f = N > 1 ? i / (N - 1) : 0;
@@ -92,14 +98,14 @@
         wk.heavySets = 3;
         wk.volumeSets = 0;
       } else {
-        wk.heavyDuration = block.heavy.hangDurationSeconds;
-        wk.heavyProtocol = block.heavy.protocol;
-        const lerpedRpe = lerp(block.heavy.rpeStart, block.heavy.rpeEnd, f);
+        wk.heavyDuration = hv.hangDurationSeconds != null ? hv.hangDurationSeconds : 5;
+        wk.heavyProtocol = hv.protocol || 'topSetPlusBackoffs';
+        const lerpedRpe = lerp(hv.rpeStart != null ? hv.rpeStart : 8, hv.rpeEnd != null ? hv.rpeEnd : 9, f);
         wk.heavyRPE = formatRPEValue(roundTo025(lerpedRpe));
-        wk.heavySets = Math.round(lerp(block.heavy.setsStart, block.heavy.setsEnd, f));
+        wk.heavySets = Math.round(lerp(hv.setsStart != null ? hv.setsStart : 3, hv.setsEnd != null ? hv.setsEnd : 3, f));
         // back-off pct lerps from boPctStart to boPctEnd if defined; falls back to single boPct
-        const boPctS = block.heavy.backoffPctOfTop || 0.82;
-        const boPctE = block.heavy.backoffPctOfTopEnd != null ? block.heavy.backoffPctOfTopEnd : boPctS;
+        const boPctS = hv.backoffPctOfTop || 0.82;
+        const boPctE = hv.backoffPctOfTopEnd != null ? hv.backoffPctOfTopEnd : boPctS;
         wk.backoffPctOfTop = roundTo(lerp(boPctS, boPctE, f), 3);
         wk.volumeDuration = block.volume ? block.volume.hangDurationSeconds : 5;
         wk.volumePct = block.volume
@@ -116,6 +122,10 @@
 
   // Expand a whole cycle's blocks into a flat generatedWeeks array.
   function expandCycle(cycle) {
+    // Without a real start date no week can be placed on the calendar —
+    // degrade to "no weeks" (renderers already handle empty weeks) instead
+    // of throwing from addDays. (Fuzz-hardened 2026-07-06.)
+    if (!cycle || !validISO(cycle.startDate)) return [];
     const out = [];
     let offset = 0;
     (cycle.blocks || []).forEach(b => {
@@ -193,6 +203,7 @@
   // same RPE" without needing identical loads week to week.
   function isoWeekStart(iso) {
     const d = new Date(iso + 'T00:00:00');
+    if (!isFinite(d.getTime())) return null;   // corrupt date: skip, don't throw
     const day = (d.getDay() + 6) % 7; // Mon=0
     d.setDate(d.getDate() - day);
     return d.toISOString().slice(0, 10);
@@ -200,8 +211,9 @@
   function deloadTrend(entries) {
     const byWeek = {};
     (entries || []).forEach(e => {
-      if (e.type !== 'Yielding' || e.e1rmKg == null) return;
+      if (!e || e.type !== 'Yielding' || e.e1rmKg == null) return;
       const wk = isoWeekStart(e.date);
+      if (!wk) return;
       if (byWeek[wk] == null || e.e1rmKg > byWeek[wk]) byWeek[wk] = e.e1rmKg;
     });
     const keys = Object.keys(byWeek).sort();
@@ -302,8 +314,15 @@
   }
 
   // ---- date helpers -----------------------------------------------------
+  // A date string is usable if the ISO-ish parse yields a real timestamp.
+  // (Fuzz-hardened 2026-07-06: corrupt dates used to throw "Invalid time
+  // value" from toISOString and take whole tabs down via the error boundary.)
+  function validISO(iso) {
+    return typeof iso === 'string' && isFinite(new Date(iso + 'T00:00:00').getTime());
+  }
   function addDays(iso, n) {
     const d = new Date(iso + 'T00:00:00');
+    if (!isFinite(d.getTime())) return null;   // corrupt input: report, don't throw
     d.setDate(d.getDate() + n);
     return d.toISOString().slice(0, 10);
   }
@@ -326,7 +345,7 @@
     e1rm, heavyAnchor, volumeAnchor, backoffAnchor, deloadAnchor,
     expandBlock, expandCycle, annotateWeekAnchors,
     recoveryFlag, deloadTrend, wmJumpGuard, guardrails,
-    addDays, daysBetween, weekNumberFor, parseRPE
+    addDays, daysBetween, weekNumberFor, parseRPE, validISO
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = Calc;

@@ -66,17 +66,23 @@
   var Z90 = 1.645, Z50 = 0.674;
   var PHI_MED = 0.985;   /* median: slope half-life ~46 days      */
   var PHI_UP  = 1.0;     /* upper:  current rate persists         */
-  var PHI_LO  = 0.90;    /* lower:  gains stall within ~a week    */
+  var PHI_LO  = 0.85;    /* lower: gains stall in ~1-2 weeks. 0.90 -> 0.85 farm-backtested
+                            2026-07-06 (qa/farm.js, 800 athletes, 38k latent targets):
+                            true-strength-below-band rate 7.3% -> 5.3% ≈ the nominal 5%,
+                            for +2% band width. 90% band covers 89.7% of latent truth. */
   var DRIFT_DN = 0.03;   /* kg/day max plausible slow loss (~0.9 kg/month) while training */
 
   function iso(ms) { return new Date(ms).toISOString().slice(0, 10); }
   function r1(v) { return Math.round(v * 10) / 10; }
 
-  /* Dedupe by date (max per day) + sort — same rule as coneHistory. */
+  /* Dedupe by date (max per day) + sort — same rule as coneHistory.
+     Entries whose date doesn't parse are dropped (fuzz-hardened 2026-07-06:
+     a corrupt last date used to reach iso() and throw "Invalid time value"). */
   function trackHistory(pts) {
     var by = {};
     (pts || []).forEach(function (p) {
       if (!p || p.x == null || p.y == null || !isFinite(+p.y)) return;
+      if (!isFinite(Date.parse(p.x))) return;
       if (by[p.x] == null || +p.y > by[p.x]) by[p.x] = +p.y;
     });
     return Object.keys(by).sort().map(function (x) { return { x: x, y: by[x] }; });
@@ -127,6 +133,13 @@
     if (hist.length < 3) return null;
     var o = opts || {};
     var horizonDays = (o.horizonWeeks || 6) * 7;
+    /* Scenario/floor tunables (defaults = module constants; overridable so
+       the offline backtest farm in qa/ can sweep them). */
+    var phiMed = o.phiMed != null ? o.phiMed : PHI_MED;
+    var phiUp = o.phiUp != null ? o.phiUp : PHI_UP;
+    var phiLo = o.phiLo != null ? o.phiLo : PHI_LO;
+    var driftDn = o.driftDn != null ? o.driftDn : DRIFT_DN;
+    var rFloor = o.rFloor != null ? o.rFloor : 0.4;
 
     var t0 = Date.parse(hist[0].x);
     var ts = hist.map(function (p) { return Math.round((Date.parse(p.x) - t0) / DAY); });
@@ -142,7 +155,7 @@
       var sl = den ? (n * sxy - sx * sy) / den : 0;
       var ic = (sy - sl * sx) / n, ss = 0;
       for (i = 0; i < n; i++) { var rr = ys[i] - (ic + sl * ts[i]); ss += rr * rr; }
-      var sig = Math.max(0.4, Math.sqrt(ss / Math.max(1, n - 2)));
+      var sig = Math.max(rFloor, Math.sqrt(ss / Math.max(1, n - 2)));
       R = sig * sig;
     }
 
@@ -190,14 +203,14 @@
       for (var dd = 1; dd <= horizonDays; dd++) { g += s; s *= phi; out.push(g); }
       return out;
     }
-    var gMed = gains(PHI_MED), gUp = gains(PHI_UP), gLo = gains(PHI_LO);
+    var gMed = gains(phiMed), gUp = gains(phiUp), gLo = gains(phiLo);
 
     function bandAt(h, z, zr) {   /* zr = scenario-offset scale (z/Z90) */
       var m = L + gMed[h];
       var hiPath = Math.max(gMed[h], gUp[h], gLo[h]);
       var loPath = Math.min(gMed[h], gUp[h], gLo[h]);
       /* drop cap: current-level uncertainty + slow-loss allowance */
-      var dn = Math.min(z * sigPath[h], z * sigNow + zr * DRIFT_DN * h);
+      var dn = Math.min(z * sigPath[h], z * sigNow + zr * driftDn * h);
       return {
         m: m,
         up: m + zr * (hiPath - gMed[h]) + z * sigPath[h],

@@ -40,6 +40,7 @@
     var by = {};
     (pts || []).forEach(function (p) {
       if (!p || p.x == null || p.y == null || !isFinite(+p.y)) return;
+      if (!isFinite(Date.parse(p.x))) return;   // corrupt date: skip (fuzz-hardened 2026-07-06)
       if (by[p.x] == null || +p.y > by[p.x]) by[p.x] = +p.y;
     });
     return Object.keys(by).sort().map(function (x) { return { x: x, y: by[x] }; });
@@ -50,10 +51,22 @@
     if (hist.length < 3) return null;
     var o = opts || {};
     var horizonDays = (o.horizonWeeks || 6) * 7;
+    /* Tunables (defaults = shipped behavior; overridable so the offline
+       backtest farm in qa/ can sweep them against synthetic athletes). */
+    var CLAMP = o.clampKgPerDay != null ? o.clampKgPerDay : 0.12;
+    var FLOOR = o.sigmaFloor != null ? o.sigmaFloor : 0.4;
+    /* fitWindow 10 -> 14 (farm-backtested 2026-07-06, qa/farm.js: 800
+       synthetic athletes, 66k walk-forward targets — win=14 cut median-path
+       MAE ~4% vs 10, and is a no-op for histories still shorter than 14).
+       CLAMP kept at 0.12 deliberately: the synthetic (plateau-heavy)
+       population prefers 0.08, Martin's real fast-gain history prefers
+       0.16 — 0.12 splits the regimes and the un-clamped Kalman display
+       covers fast phases. See qa/FARM_REPORT.md. */
+    var WINDOW = o.fitWindow != null ? o.fitWindow : 14;
 
     /* Ordinary least squares through the most recent points,
        with days as the time axis. */
-    var use = hist.slice(-10);
+    var use = hist.slice(-WINDOW);
     var t0 = Date.parse(use[0].x);
     var ts = use.map(function (p) { return (Date.parse(p.x) - t0) / DAY; });
     var n = use.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
@@ -63,7 +76,7 @@
     var denom = n * sxx - sx * sx;
     if (!denom) return null;                          /* all on one day */
     var slope = (n * sxy - sx * sy) / denom;          /* kg per day */
-    slope = Math.max(-0.12, Math.min(0.12, slope));   /* ±0.84 kg/week cap — walk-forward backtested; ±0.05 under-projected fast growth phases by ~3.5kg at 6wk */
+    slope = Math.max(-CLAMP, Math.min(CLAMP, slope)); /* ±0.84 kg/week cap — walk-forward backtested; ±0.05 under-projected fast growth phases by ~3.5kg at 6wk */
     var intercept = (sy - slope * sx) / n;
 
     /* Residual spread sets the cone width. */
@@ -72,7 +85,7 @@
       var r = p.y - (intercept + slope * ts[i]);
       ss += r * r;
     });
-    var sigma = Math.max(0.4, Math.sqrt(ss / Math.max(1, n - 2)));
+    var sigma = Math.max(FLOOR, Math.sqrt(ss / Math.max(1, n - 2)));
 
     /* Pin the cone to the last logged session so it grows out of the
        final blue node instead of jumping to the fit line. */
