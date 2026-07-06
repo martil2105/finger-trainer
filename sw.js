@@ -1,5 +1,5 @@
 /* sw.js — offline app-shell cache. Bump CACHE on any asset change. */
-const CACHE = 'ft-v45';
+const CACHE = 'ft-v46';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,8 @@ const ASSETS = [
   './motion.js',
   './cone.js',
   './cone_data.js',
+  './kalman.js',
+  './kalman_data.js',
   './calc.js',
   './templates.js',
   './db.js',

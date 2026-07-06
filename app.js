@@ -951,6 +951,45 @@
       }
     }
 
+    // ---- Filtered strength (Kalman) — sibling of the cone, display-only ----
+    // Local-linear-trend Kalman filter over the SAME 3s-native history the
+    // cone uses (kalman_data.js + kalman.js). Separates the strength signal
+    // from session noise and projects an asymmetric fan: upper = current rate
+    // persists, median = gains slow gradually, lower = gains stall — sustained
+    // strength loss while training continues is treated as unlikely, because
+    // single-session dips are expression noise, not lost strength. Nothing
+    // here feeds anchors, Working Maxes, or any training math.
+    view.appendChild(el('h2', null, ['Filtered strength · 3s']));
+    if (typeof drawKalmanTrack !== 'function' || typeof buildKalmanTrack !== 'function') {
+      view.appendChild(el('div', { class: 'card' }, ['Filtered-strength layer not loaded.']));
+    } else if (hist3.length < 3) {
+      view.appendChild(el('div', { class: 'card' }, ['Log at least three Yielding sessions to filter a trend.']));
+    } else {
+      const ktests = weeks
+        .filter(w => w.isDeloadTest && w.startDate)
+        .map(w => ({ date: testDayIso(cycle, w), label: 'Test W' + w.weekNumber }));
+      const kmodel = buildKalmanTrack(hist3, { horizonWeeks: 6, tests: ktests });
+      if (!kmodel) {
+        view.appendChild(el('div', { class: 'card' }, ['Not enough signal to filter yet.']));
+      } else {
+        const kCard = el('div', { class: 'card' });
+        drawKalmanTrack(hist3, kmodel, kCard, { unit: 'kg', todayX: todayISO() });
+        const kr = kmodel.readiness;
+        const kTrend = (kmodel.slopePerWeek >= 0 ? '+' : '−') + Math.abs(kmodel.slopePerWeek);
+        const kDelta = (kr.deltaKg >= 0 ? '+' : '−') + Math.abs(kr.deltaKg);
+        kCard.appendChild(el('p', { class: 'card-title', style: 'margin:10px 0 0;font-size:13px' }, [
+          'Filtered ' + kr.filtered + ' kg · trend ' + kTrend + ' kg/wk. Last session ' +
+          kDelta + ' kg (' + kr.sigma + 'σ) — ' + kr.band + '.'
+        ]));
+        kCard.appendChild(el('p', { class: 'card-note' }, [
+          'Kalman-filtered strength: solid line = signal through session noise · dots = logged sessions · ribbon = ±1σ · fan = 50/90% range. ' +
+          'The fan is asymmetric by design — upper edge: current rate persists · dashed: gains slow gradually · lower edge: gains stall rather than reverse (sustained loss while training is unlikely; bad days are noise). ' +
+          'Assumes training continues. Display only — does not affect anchors or WMs.'
+        ]));
+        view.appendChild(kCard);
+      }
+    }
+
     // benchmark history table (benches already fetched ascending above)
     view.appendChild(el('h2', null, ['Benchmark history']));
     const benchesDesc = benches.slice().reverse();
