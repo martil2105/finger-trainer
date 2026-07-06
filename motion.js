@@ -77,19 +77,28 @@
     }).observe(host, { childList: true, subtree: true });
   }
 
-  /* ---- Sheet exit: wrap App.closeSheet, behavior unchanged ----- */
+  /* ---- Sheet exit: wrap App.closeSheet ------------------------- */
+  /* The delayed close must remove EXACTLY the overlay it animated.
+     It used to re-call the original closeSheet after 190ms; if the
+     overlay was already gone by then (e.g. "Do a different workout"
+     -> tap a session: the runner mounts into #modal-host and
+     replaces the sheet within ~20ms), the original's fallback
+     branch wiped ALL of #modal-host — killing the just-started
+     session screen. Capturing the overlay node makes the deferred
+     step idempotent and unable to touch anything else.            */
   function wrapSheetClose() {
     if (!window.App || typeof window.App.closeSheet !== 'function') return;
     if (window.App.closeSheet.__motionWrapped) return;
     var orig = window.App.closeSheet;
     window.App.closeSheet = function () {
-      var ov = document.querySelector('.sheet-overlay');
+      var ov = document.querySelector('#modal-host .sheet-overlay');   /* same scope as the original */
       if (REDUCED || !ov) return orig.apply(this, arguments);
       ov.classList.add('closing');
       var sh = ov.querySelector('.sheet');
       if (sh) sh.classList.add('closing');
-      var self = this, args = arguments;
-      setTimeout(function () { orig.apply(self, args); }, 190);
+      setTimeout(function () {
+        if (ov.parentNode) ov.parentNode.removeChild(ov);
+      }, 190);
     };
     window.App.closeSheet.__motionWrapped = true;
   }

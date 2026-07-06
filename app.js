@@ -531,6 +531,11 @@
 
     // ---- stepping-stone week list ----
     if (App.state.expandedWeek == null) App.state.expandedWeek = curWk || 1;
+    // Dates that actually have a logged session — a past scheduled day is only
+    // "done" if something was logged that day (green used to mean merely
+    // "the date has passed", which showed skipped workouts as completed).
+    const progLogs = await DB.logsNewestFirst();
+    const loggedDates = new Set(progLogs.map(l => l.date));
     const hasVolumeDay = Object.values(cycle.weeklyStructure || {}).includes('Volume');
     const dayShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const list = el('div', { style: 'margin-top:14px' });
@@ -580,7 +585,8 @@
         if (p.sets) bits.push(p.sets + ' sets');
         if (p.anchor != null) bits.push('~' + p.anchor + ' kg');
         let dotCls = p.role === 'Test' ? 'test' : 'future';
-        if (dIso < todayISO()) dotCls = 'done';
+        if (loggedDates.has(dIso)) dotCls = 'done';                      // actually logged
+        else if (dIso < todayISO()) dotCls = 'missed';                   // scheduled, passed, no log
         else if (!sawNext && isCur) { if (p.role !== 'Test') dotCls = 'next'; sawNext = true; }
         detail.appendChild(el('div', { class: 'sess-row' }, [
           el('span', { class: 'sess-dot ' + dotCls }),
