@@ -25,6 +25,24 @@
    · R (how noisy one session is) comes from the residual spread
      around an OLS fit of the raw series, floored at 0.4² — the
      same idea the cone uses for its width.
+   · RPE-WEIGHTED R (added 2026-07-10): when history points carry
+     the top-set RPE ({x, y, rpe}), each observation gets its own
+     R_i. An E1RM read off an @8 top set extrapolates further
+     through the RPE→%max curve than an @9.5, so its error is
+     larger by exactly the propagation factor of the curve already
+     in use: e1rm = load/pct, pct = 1 − k(10 − rpe), so
+     σ_i ∝ 1/pct_i (k = opts.rpeK: the personal calibrated k from
+     rpe_cal.js when available, else the generic 0.06). Weights
+     w_i = (1/pct_i)² are NORMALIZED to mean 1 over the observed
+     sessions, so the overall noise level stays exactly the
+     OLS-calibrated R — the weighting only redistributes trust
+     between sessions, it never claims more total information.
+     Points without a usable rpe (missing, or outside 4..10) get
+     w = 1; if no point has one, every path below is numerically
+     identical to the unweighted filter. Normalized weights are
+     capped to [0.5, 2.5] so a junk rpe can't dominate the fit.
+     No new fitted parameters — the factor is forced by the same
+     curve that produced the E1RM itself.
    · q (how fast the trend may drift) is fit by maximum
      likelihood over a log grid 1e-5..1e-1 (25 steps), from the
      filter's own one-step prediction errors. Fallback 1e-3 when
@@ -77,20 +95,30 @@
 
   /* Dedupe by date (max per day) + sort — same rule as coneHistory.
      Entries whose date doesn't parse are dropped (fuzz-hardened 2026-07-06:
-     a corrupt last date used to reach iso() and throw "Invalid time value"). */
+     a corrupt last date used to reach iso() and throw "Invalid time value").
+     The winning (max-y) entry's rpe rides along when present + sane. */
   function trackHistory(pts) {
     var by = {};
     (pts || []).forEach(function (p) {
       if (!p || p.x == null || p.y == null || !isFinite(+p.y)) return;
       if (!isFinite(Date.parse(p.x))) return;
-      if (by[p.x] == null || +p.y > by[p.x]) by[p.x] = +p.y;
+      if (by[p.x] == null || +p.y > by[p.x].y) {
+        var rpe = (p.rpe != null && isFinite(+p.rpe) && +p.rpe >= 4 && +p.rpe <= 10)
+          ? +p.rpe : null;
+        by[p.x] = { y: +p.y, rpe: rpe };
+      }
     });
-    return Object.keys(by).sort().map(function (x) { return { x: x, y: by[x] }; });
+    return Object.keys(by).sort().map(function (x) {
+      return { x: x, y: by[x].y, rpe: by[x].rpe };
+    });
   }
 
   /* One full filter pass. Returns states per observation, final state,
-     and the Gaussian innovation log-likelihood (for the q search). */
-  function runFilter(ts, ys, q, R) {
+     and the Gaussian innovation log-likelihood (for the q search).
+     Rarr = per-observation noise (array, same length as ys); with a
+     constant array this is numerically identical to the old scalar-R
+     filter. Rbase seeds the initial level uncertainty. */
+  function runFilter(ts, ys, q, Rarr, Rbase) {
     /* seed L0/S0 from OLS through the first <=5 points */
     var k = Math.min(5, ys.length), i;
     var sx = 0, sy = 0, sxx = 0, sxy = 0;
@@ -100,8 +128,8 @@
     var den = k * sxx - sx * sx;
     var S = den ? (k * sxy - sx * sy) / den : 0;
     var L = ys[0];
-    var P00 = 4 * R, P01 = 0, P11 = 0.05 * 0.05;
-    var ll = 0, out = [], lastInnov = 0, lastS = Math.sqrt(P00 + R);
+    var P00 = 4 * Rbase, P01 = 0, P11 = 0.05 * 0.05;
+    var ll = 0, out = [], lastInnov = 0, lastS = Math.sqrt(P00 + Rarr[0]);
 
     for (i = 0; i < ys.length; i++) {
       if (i > 0) {
@@ -113,7 +141,7 @@
           P00 = n00; P01 = n01; P11 = P11 + q;
         }
       }
-      var s = P00 + R;                        /* innovation variance */
+      var s = P00 + Rarr[i];                  /* innovation variance */
       var r = ys[i] - L;                      /* innovation          */
       ll += -0.5 * (Math.log(2 * Math.PI * s) + (r * r) / s);
       var K0 = P00 / s, K1 = P01 / s;
@@ -159,6 +187,25 @@
       R = sig * sig;
     }
 
+    /* ---- per-observation R from top-set RPE (see header) ----
+       w_i = (1/pct_i)², normalized to mean 1, capped [0.5, 2.5];
+       missing/invalid rpe -> exactly R (no-rpe input == old filter). */
+    var rpeK = (o.rpeK != null && isFinite(+o.rpeK))
+      ? Math.min(0.10, Math.max(0.03, +o.rpeK)) : 0.06;
+    var wRaw = hist.map(function (p) {
+      if (p.rpe == null) return null;
+      var pct = 1 - rpeK * (10 - p.rpe);
+      if (!(pct > 0.2)) return null;
+      return 1 / (pct * pct);
+    });
+    var wSum = 0, wN = 0;
+    wRaw.forEach(function (w) { if (w != null) { wSum += w; wN++; } });
+    var wMean = wN ? wSum / wN : 1;
+    var Rarr = wRaw.map(function (w) {
+      if (w == null) return R;
+      return R * Math.min(2.5, Math.max(0.5, w / wMean));
+    });
+
     /* ---- q by 1-D MLE over a log grid (fallback 1e-3 for tiny n) ---- */
     var q = o.q;
     if (q == null) {
@@ -167,14 +214,14 @@
         var bestQ = 1e-3, bestLL = -Infinity, steps = 25;
         for (i = 0; i < steps; i++) {
           var qc = Math.exp(Math.log(1e-5) + (i / (steps - 1)) * Math.log(1e4));
-          var f = runFilter(ts, ys, qc, R);
+          var f = runFilter(ts, ys, qc, Rarr, R);
           if (isFinite(f.ll) && f.ll > bestLL) { bestLL = f.ll; bestQ = qc; }
         }
         q = bestQ;
       }
     }
 
-    var fit = runFilter(ts, ys, q, R);
+    var fit = runFilter(ts, ys, q, Rarr, R);
 
     /* ---- filtered track ---- */
     var filtered = hist.map(function (p, j) {
@@ -266,6 +313,8 @@
         band: band
       },
       q: q, R: Math.round(R * 100) / 100,
+      rObs: Rarr.map(function (r) { return Math.round(r * 100) / 100; }),
+      rpeWeighted: wN > 0,
       slopePerWeek: Math.round(fit.S * 7 * 100) / 100,
       n: n
     };

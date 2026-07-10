@@ -775,13 +775,16 @@
     };
 
     // series: per-session for the cycle view, per-benchmark for all-time
-    const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: pE1eq(l) }));
+    // rpe rides along for the Kalman filter's per-session noise weighting
+    // (kalman_data.js); every other consumer reads x/y only and ignores it.
+    const s5all = yielding.filter(l => l.hangDurationSeconds === 5).map(l => ({ x: l.date, y: pE1eq(l), rpe: l.topSetRPE }));
     const s3all = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({ x: l.date, y: pE1eq(l) }));
     const inCyc = p => !cycStart || p.x >= cycStart;
     const s5cyc = s5all.filter(inCyc), s3cyc = s3all.filter(inCyc);
     const s3raw = yielding.filter(l => l.hangDurationSeconds === 3).map(l => ({
       x: l.date,
-      y: pE1raw3(l)
+      y: pE1raw3(l),
+      rpe: l.topSetRPE
     }));
     const isAll = App.state.analyticsRange === 'all';
     const r5 = isAll ? s5all : s5cyc;      // 5s sessions
@@ -1015,7 +1018,12 @@
       const ktests = weeks
         .filter(w => w.isDeloadTest && w.startDate)
         .map(w => ({ date: testDayIso(cycle, w), label: 'Test W' + w.weekNumber }));
-      const kmodel = buildKalmanTrack(hist3, { horizonWeeks: 6, tests: ktests });
+      // Same series as hist3 but carrying each session's top-set RPE, so the
+      // filter can trust near-limit sessions (@9.5) a little more than the
+      // longer extrapolations (@8). rpeK = personal curve when calibrated.
+      // Weights are mean-normalized inside — overall noise level unchanged.
+      const khist = s5all.map(p => ({ x: p.x, y: Calc.roundTo(p.y * durFactor.factor, 1), rpe: p.rpe })).concat(s3raw);
+      const kmodel = buildKalmanTrack(khist, { horizonWeeks: 6, tests: ktests, rpeK: rpeCal.k });
       if (!kmodel) {
         view.appendChild(el('div', { class: 'card' }, ['Not enough signal to filter yet.']));
       } else {
@@ -1031,6 +1039,9 @@
         kCard.appendChild(el('p', { class: 'card-note' }, [
           'Kalman-filtered strength: solid line = signal through session noise · dots = logged sessions · ribbon = ±1σ · fan = 50/90% range. ' +
           'The fan is asymmetric by design — upper edge: current rate persists · dashed: gains slow gradually · lower edge: gains stall rather than reverse (sustained loss while training is unlikely; bad days are noise). ' +
+          (kmodel.rpeWeighted
+            ? 'Sessions are weighted by top-set RPE: near-limit efforts count as sharper reads than longer extrapolations. '
+            : '') +
           'Assumes training continues. Display only — does not affect anchors or WMs.'
         ]));
         view.appendChild(kCard);
@@ -1741,7 +1752,12 @@
     body.push(el('div', { class: 'field' }, [el('label', null, ['Date']), dInput]));
 
     // type / role / venue selects
-    body.push(selectField('Type', ['Yielding', 'OI', 'Climbing'], state.type, v => { state.type = v; updE1RM(); }));
+    body.push(selectField('Type', ['Yielding', 'OI', 'Climbing'], state.type, v => {
+      state.type = v; updE1RM();
+      boField.style.display = v === 'Yielding' ? '' : 'none';   // per-set rows are a Yielding concept
+      if (v !== 'Yielding') setsField.style.display = '';
+      else syncSets();
+    }));
     body.push(selectField('Role', ['Heavy', 'Volume', 'OIprimer', 'Climb', 'Test', 'Deload'], state.role, v => state.role = v));
     body.push(selectField('Venue', ['Board', 'Gym', 'Outdoor', 'Home', 'Beastmaker', 'Other'], state.venue, v => state.venue = v));
     body.push(selectField('Hang duration', ['5', '3', '7'], String(state.hangDurationSeconds), v => { state.hangDurationSeconds = +v; }));
@@ -1755,9 +1771,48 @@
       el('div', { class: 'field' }, [el('label', null, ['Top set load']), loadSt]),
       el('div', { class: 'field' }, [el('label', null, ['Top set RPE']), rpeSt])
     ]));
-    body.push(el('div', { class: 'field' }, [el('label', null, ['Sets']), setsSt]));
+    const setsField = el('div', { class: 'field' }, [el('label', null, ['Sets']), setsSt]);
+    body.push(setsField);
     const e1rmLine = el('p', { class: 'muted' }, ['']);
     body.push(e1rmLine);
+
+    // ---- back-off sets (per-set detail) --------------------------------
+    // setsDetail[0] always mirrors the top-set steppers; the rows below are
+    // the back-offs. While rows exist the Sets count is derived (1 + rows)
+    // and the manual Sets stepper is hidden to keep the two consistent.
+    const boRows = (Array.isArray(e.setsDetail) ? e.setsDetail.slice(1) : [])
+      .map(s => ({ load: (s && s.load != null) ? s.load : 0, rpe: (s && s.rpe != null) ? s.rpe : 7.5 }));
+    const hadDetail = Array.isArray(e.setsDetail) && e.setsDetail.length > 0;
+    const boList = el('div', null, []);
+    const boField = el('div', { class: 'field' }, [el('label', null, ['Back-off sets']), boList]);
+    function syncSets() {
+      if (boRows.length) setsSt.setValue(1 + boRows.length);
+      setsField.style.display = boRows.length ? 'none' : '';
+    }
+    function redrawBo() {
+      boList.innerHTML = '';
+      boRows.forEach((r, i) => {
+        const lSt = stepper({ min: 0, max: 80, step: 0.5, value: r.load, fmt: v => v + ' kg', onChange: v => r.load = v });
+        const rSt = stepper({ min: 5, max: 10, step: 0.5, value: r.rpe, fmt: v => '@' + v, onChange: v => r.rpe = v });
+        boList.appendChild(el('div', { class: 'row', style: 'margin:8px 0 4px' }, [
+          el('span', { class: 'muted' }, ['Set ' + (i + 2)]),
+          el('button', { class: 'btn secondary', style: 'padding:2px 12px;min-height:0',
+            onclick: () => { boRows.splice(i, 1); redrawBo(); } }, ['×'])
+        ]));
+        boList.appendChild(el('div', { class: 'grid2' }, [lSt, rSt]));
+      });
+      boList.appendChild(el('button', { class: 'btn secondary', style: 'margin-top:6px', onclick: () => {
+        if (boRows.length >= 9) return;
+        const prev = boRows[boRows.length - 1];
+        boRows.push(prev ? { load: prev.load, rpe: prev.rpe }
+          : { load: Calc.roundTo05(loadSt.getValue() * 0.85), rpe: 7.5 });   // ~85% of top, @7-8 zone
+        redrawBo();
+      } }, ['+ Add back-off set']));
+      syncSets();
+    }
+    redrawBo();
+    if (state.type !== 'Yielding') boField.style.display = 'none';
+    body.push(boField);
     function updE1RM() {
       const v = state.type === 'Yielding' ? Calc.e1rm(loadSt.getValue(), rpeSt.getValue(), state.hangDurationSeconds) : null;
       e1rmLine.textContent = v != null ? `E1RM: ${v} kg (5s-eq)` : '';
@@ -1787,6 +1842,15 @@
         hangDurationSeconds: state.type === 'Yielding' ? state.hangDurationSeconds : null, grip: state.grip,
         topSetLoadKg: state.type === 'Yielding' ? loadSt.getValue() : null,
         topSetRPE: state.type === 'Yielding' ? rpeSt.getValue() : null,
+        // Per-set detail: [0] mirrors the top-set steppers, rest come from the
+        // back-off rows above. Entries that never had detail and got no rows
+        // stay null; non-Yielding types keep whatever they had (no UI for it).
+        setsDetail: state.type === 'Yielding'
+          ? ((boRows.length || hadDetail)
+              ? [{ load: loadSt.getValue(), rpe: rpeSt.getValue() }]
+                  .concat(boRows.map(r => ({ load: r.load, rpe: r.rpe })))
+              : null)
+          : (e.setsDetail || null),
         sets: setsSt.getValue(), bodyweightKg: bw,
         taxing: taxR.getValue(), feltStrong: feltR.getValue(), nextDayFeel: state.ndf != null ? state.ndf : (e.nextDayFeel || null),
         block: blk || '', notes: state.notes
@@ -2050,6 +2114,16 @@
       role: plan.role, venue: 'Board', hangDurationSeconds: plan.duration || null, grip: 'HalfCrimp',
       topSetLoadKg: result.load != null ? result.load : null,
       topSetRPE: result.rpe != null ? result.rpe : null, sets: result.sets,
+      // Per-effort capture from the runner: [{load, rpe}, ...] — top set first,
+      // then back-offs. Raw data only; nothing reads it yet (future: back-off
+      // fatigue/readiness analytics). Additive field: sync merge + import keep
+      // whole records, so old clients simply carry it along.
+      setsDetail: Array.isArray(result.setsDetail)
+        ? result.setsDetail.map(s => ({
+            load: (s && s.load != null && isFinite(+s.load)) ? +s.load : null,
+            rpe: (s && s.rpe != null && isFinite(+s.rpe)) ? +s.rpe : null
+          }))
+        : null,
       bodyweightKg: bw, taxing: result.taxing, feltStrong: result.felt, nextDayFeel: null,
       block: plan.blockName || '', notes: result.notes || ''
     };

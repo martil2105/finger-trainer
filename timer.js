@@ -403,7 +403,10 @@
       host().innerHTML = '';
       await App.logSession(R.plan, {
         load: top.load != null ? top.load : null, rpe: top.rpe != null ? top.rpe : null,
-        sets: setsCount, taxing: tax.getValue(), felt: felt.getValue(), notes: notes.value
+        sets: setsCount, taxing: tax.getValue(), felt: felt.getValue(), notes: notes.value,
+        // Full per-effort capture (top set first, then back-offs in order) —
+        // until 2026-07-10 this was collected by the steppers and discarded here.
+        setsDetail: R.sets.map(s => ({ load: s.load, rpe: s.rpe }))
       });
       R = null;
     });
