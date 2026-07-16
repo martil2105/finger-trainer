@@ -2110,7 +2110,9 @@
   App.logSession = async function (plan, result) {
     const bw = (await DB.getMeta('bodyweightKg')) || null;
     const entry = {
-      id: Templates.uid(), date: todayISO(), type: plan.role === 'OIprimer' ? 'OI' : 'Yielding',
+      // result.date: the runner carries the day the session was STARTED, so a
+      // session recovered after an app kill still logs under its real date.
+      id: Templates.uid(), date: result.date || todayISO(), type: plan.role === 'OIprimer' ? 'OI' : 'Yielding',
       role: plan.role, venue: 'Board', hangDurationSeconds: plan.duration || null, grip: 'HalfCrimp',
       topSetLoadKg: result.load != null ? result.load : null,
       topSetRPE: result.rpe != null ? result.rpe : null, sets: result.sets,
@@ -2135,6 +2137,47 @@
     if (window.Sync && Sync.auto) Sync.auto({ force: true });
   };
 
+  // ---- unfinished-session recovery --------------------------------------
+  // The runner snapshots in-progress sessions to the (device-local) meta key
+  // 'pendingRunnerSession'. If the app was killed mid-session, offer at launch:
+  // resume (same-day only), save what's done (dated to the session day), or
+  // discard. Closing the sheet keeps the snapshot for the next launch.
+  async function checkPendingRunnerSession() {
+    let snap;
+    try { snap = await DB.getMeta('pendingRunnerSession'); } catch (e) { return; }
+    if (!snap || !snap.plan) return;
+    const sets = Array.isArray(snap.sets) ? snap.sets : [];
+    const stale = !!snap.date && snap.date < todayISO();
+    if (stale && !sets.length) { DB.setMeta('pendingRunnerSession', null); return; } // nothing worth saving
+    const clear = () => DB.setMeta('pendingRunnerSession', null);
+
+    const when = snap.date ? (stale ? fmtDate(snap.date) : 'today') : 'earlier';
+    const what = [snap.plan.blockName, snap.plan.role].filter(Boolean).join(' · ');
+    const loads = sets.filter(s => s && s.load != null).map(s => s.load + 'kg@' + s.rpe).join('  ');
+    const nodes = [
+      el('p', null, [`You left a session unfinished ${when} (${what}).`]),
+      el('p', { class: 'muted' }, [
+        sets.length
+          ? `${sets.length} of ${snap.totalEfforts || '?'} efforts logged` + (loads ? ': ' + loads : '')
+          : 'No efforts logged yet.'
+      ])
+    ];
+    if (!stale) nodes.push(el('button', {
+      class: 'btn',
+      onclick: () => { App.closeSheet(); Runner.resume(snap); }
+    }, ['Resume session']));
+    if (sets.length) nodes.push(el('button', {
+      class: !stale ? 'btn secondary' : 'btn',
+      onclick: () => { App.closeSheet(); Runner.finishPending(snap); }
+    }, ['Save what’s done']));
+    nodes.push(el('div', { class: 'spacer' }));
+    nodes.push(el('button', {
+      class: 'btn secondary',
+      onclick: () => { clear(); App.closeSheet(); }
+    }, ['Discard']));
+    App.sheet('Unfinished session', nodes);
+  }
+
   // ---- boot -------------------------------------------------------------
   document.body.addEventListener('touchstart', () => {}, { passive: true });
   document.querySelectorAll('#tabbar .tab').forEach(t =>
@@ -2153,6 +2196,7 @@
       console.error('Init error:', err);
     }
     App.go('today'); // render() has its own error boundary
+    checkPendingRunnerSession().catch(() => {});
     // Background sync: on launch and whenever the app returns to foreground.
     if (window.Sync && Sync.auto) {
       Sync.auto();

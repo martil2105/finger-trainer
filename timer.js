@@ -56,6 +56,67 @@
   const Runner = {};
   let R = null; // current session state
 
+  // ---- crash/close recovery ---------------------------------------------
+  // R lives only in memory, so an app kill (iOS reclaiming the PWA, closed
+  // tab, forgotten session) used to lose everything. We snapshot the
+  // serializable session state to a device-local meta key after every logged
+  // set / phase change; app.js checks it at launch and offers to recover.
+  const PENDING_KEY = 'pendingRunnerSession';
+  function localToday() { // local calendar date, same rule as app.js todayISO
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }
+  function persistR() {
+    if (!R) return;
+    try {
+      const snap = JSON.parse(JSON.stringify({ // strips _steppers/undefined
+        plan: R.plan, restDefault: R.restDefault, phase: R.phase,
+        effort: R.effort, totalEfforts: R.totalEfforts, hangSeconds: R.hangSeconds,
+        sets: R.sets, curLoad: R.curLoad, curRPE: R.curRPE,
+        warmupKg: R.warmupKg, readiness: R.readiness, skipExtensions: R.skipExtensions,
+        date: R.date, savedAt: Date.now()
+      }));
+      DB.setMeta(PENDING_KEY, snap).catch(() => {});
+    } catch (e) {}
+  }
+  function clearPending() { try { DB.setMeta(PENDING_KEY, null).catch(() => {}); } catch (e) {} }
+
+  // Rebuild a session from a recovery snapshot. Mid-timer phases restart at
+  // the prep screen for that effort (COUNT/HANG: the hang wasn't logged;
+  // REST: real-world rest is long over) — logged sets are exactly preserved.
+  Runner.resume = async function (snap) {
+    if (R) { clearTick(); releaseWakeLock(); R = null; const h = host(); if (h) h.innerHTML = ''; }
+    try {
+      unlockAudio();
+      await acquireWakeLock();
+      R = {
+        plan: snap.plan, restDefault: snap.restDefault || 180,
+        phase: snap.phase || 'PREP', effort: snap.effort || 0,
+        totalEfforts: snap.totalEfforts || 1,
+        hangSeconds: snap.hangSeconds || (snap.plan && snap.plan.duration) || 5,
+        sets: Array.isArray(snap.sets) ? snap.sets : [],
+        curLoad: snap.curLoad != null ? snap.curLoad : 25,
+        curRPE: snap.curRPE != null ? snap.curRPE : 9,
+        timeLeft: 0, stopped: false,
+        warmupKg: snap.warmupKg != null ? snap.warmupKg : null,
+        readiness: snap.readiness || null, skipExtensions: !!snap.skipExtensions,
+        date: snap.date || localToday()
+      };
+      if (R.phase === 'COUNT' || R.phase === 'HANG' || R.phase === 'REST') R.phase = 'PREP';
+      renderRunner();
+    } catch (err) {
+      alert('Error resuming session: ' + err.message);
+      R = null;
+    }
+  };
+
+  // Recovery option "save what's done": jump straight to the end screen so
+  // the banked sets can be logged (dated to the original session day).
+  Runner.finishPending = function (snap) {
+    return Runner.resume(Object.assign({}, snap, { phase: 'END' }));
+  };
+
   Runner.start = async function (plan) {
     // A previous session left in memory (user switched tabs / backgrounded the
     // PWA / abandoned it mid-way) used to make every future start silently
@@ -91,7 +152,8 @@
         curLoad: plan.anchor != null ? plan.anchor : (plan.role === 'OIprimer' ? null : 25),
         curRPE: typeof plan.rpe === 'number' ? plan.rpe : (plan.rpe ? Calc.parseRPE(plan.rpe) : 9),
         timeLeft: 0, stopped: false,
-        warmupKg, readiness: null, skipExtensions: false
+        warmupKg, readiness: null, skipExtensions: false,
+        date: localToday()
       };
       renderRunner();
     } catch (err) {
@@ -141,6 +203,7 @@
 
   // ---- readiness check (autoregulation from the Reference sheet) --------
   function renderReadiness() {
+    persistR();
     const rpeSt = App.stepper({ min: 5, max: 10, step: 0.5, value: 6, fmt: v => '@' + v });
     const wrap = shell('', { body: '', foot: '' });
     const rb = wrap.querySelector('.r-body'); rb.style.justifyContent = 'flex-start'; rb.style.paddingTop = '10px'; rb.innerHTML = '';
@@ -185,10 +248,11 @@
   }
 
   function cancelSession() {
-    clearTick(); releaseWakeLock(); host().innerHTML = ''; R = null; App.closeSheet(); App.render();
+    clearTick(); releaseWakeLock(); clearPending(); host().innerHTML = ''; R = null; App.closeSheet(); App.render();
   }
 
   function renderPrep() {
+    persistR();
     const p = R.plan;
     const lines = [];
     if (p.duration) lines.push(`${p.duration}s hang`);
@@ -242,6 +306,7 @@
   function toLogSet() { R.phase = 'LOG_SET'; renderLogSet(); }
 
   function renderLogSet() {
+    persistR();
     const p = R.plan;
     const isOI = p.protocol === 'oi';
     const body = document.createElement('div');
@@ -294,6 +359,7 @@
       const loggedLoad = R._steppers.loadSt.getValue();
       const loggedRPE = R._steppers.rpeSt.getValue();
       R.sets.push({ load: loggedLoad, rpe: loggedRPE });
+      persistR(); // bank the set immediately — survives an app kill mid-prompt
 
       // Early finish: this set is banked — skip the autoregulation prompts and
       // go straight to the save screen so a short session still logs cleanly.
@@ -324,6 +390,7 @@
       }
     } else {
       R.sets.push({ load: null, rpe: null });
+      persistR();
       if (opts.finishAfter) { R.phase = 'END'; return renderEnd(); }
       if (p.protocol === 'oi' && p.sets === '3-5') {
         if (R.effort === 2 || R.effort === 3) {
@@ -359,6 +426,7 @@
   }
 
   function renderRest() {
+    persistR();
     R.timeLeft = R.restDefault;
     let pinged = false;
     const wrap = shell('is-rest', {
@@ -381,6 +449,7 @@
 
   function renderEnd() {
     clearTick();
+    R.phase = 'END'; persistR();
     const tax = App.rating(5, null);
     const felt = App.rating(10, null);
     const notes = document.createElement('textarea'); notes.placeholder = 'Notes (optional)';
@@ -406,8 +475,11 @@
         sets: setsCount, taxing: tax.getValue(), felt: felt.getValue(), notes: notes.value,
         // Full per-effort capture (top set first, then back-offs in order) —
         // until 2026-07-10 this was collected by the steppers and discarded here.
-        setsDetail: R.sets.map(s => ({ load: s.load, rpe: s.rpe }))
+        setsDetail: R.sets.map(s => ({ load: s.load, rpe: s.rpe })),
+        // Recovered sessions keep the day they were actually trained.
+        date: R.date || null
       });
+      clearPending();
       R = null;
     });
     const rf = wrap.querySelector('.r-foot'); rf.innerHTML = ''; rf.appendChild(save);
@@ -415,7 +487,7 @@
 
   Runner.abort = function () {
     App.confirm('Quit this session? Nothing will be logged.', 'Quit', () => {
-      clearTick(); releaseWakeLock(); host().innerHTML = ''; R = null; App.closeSheet(); App.render();
+      clearTick(); releaseWakeLock(); clearPending(); host().innerHTML = ''; R = null; App.closeSheet(); App.render();
     });
   };
 

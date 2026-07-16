@@ -80,7 +80,7 @@
 
   // Device-local meta keys: never uploaded to the Gist and never overwritten
   // by a peer (secrets, per-device prompts, per-device sync bookkeeping).
-  const LOCAL_META = ['githubToken', 'githubGistId', 'lastSyncAt', 'pendingNextDayFeel'];
+  const LOCAL_META = ['githubToken', 'githubGistId', 'lastSyncAt', 'pendingNextDayFeel', 'pendingRunnerSession'];
 
   // ---- meta key/value ---------------------------------------------------
   function getMeta(key) { return get('meta', key).then(r => r ? r.value : undefined); }
