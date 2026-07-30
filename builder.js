@@ -21,14 +21,16 @@
   // ---- 10.1 cycle list --------------------------------------------------
   Builder.renderList = async function (view) {
     const cycles = await DB.getAll('cycles');
-    const order = { active: 0, draft: 1, archived: 2 };
-    cycles.sort((a, b) => (order[a.status] - order[b.status]));
+    const order = { active: 0, draft: 1, paused: 2, archived: 3 };
+    cycles.sort((a, b) => ((order[a.status] != null ? order[a.status] : 3) - (order[b.status] != null ? order[b.status] : 3)));
 
     view.appendChild(el('div', { class: 'card' }, [
       el('strong', null, ['New cycle from template']),
       el('div', { class: 'spacer' }),
-      el('button', { class: 'btn', style: 'margin:4px 0 8px', onclick: () => startTopSetBlock() }, ['★ Start 4-Week Top-Set Block (3s)']),
-      el('p', { class: 'muted', style: 'margin:0 0 8px' }, ['Activates now and archives your current cycle. All logs are kept.']),
+      el('button', { class: 'btn', style: 'margin:4px 0 4px', onclick: () => startBlockPullBlock() }, ['★ Start Block Pull · Data Block (3s)']),
+      el('p', { class: 'muted', style: 'margin:0 0 10px' }, ['One-handed edge pickups, 3×/week, every session identical for six weeks. Pauses your current cycle — nothing is archived and all logs are kept.']),
+      el('button', { class: 'btn secondary', style: 'margin:4px 0 8px', onclick: () => startTopSetBlock() }, ['Start 4-Week Top-Set Block (3s)']),
+      el('button', { class: 'btn small secondary', style: 'margin:4px 6px 0 0', onclick: () => newFrom('P') }, ['Block Pull (draft)']),
       el('button', { class: 'btn small secondary', style: 'margin:4px 6px 0 0', onclick: () => newFrom('A') }, ['Current (Trans→Peak)']),
       el('button', { class: 'btn small secondary', style: 'margin:4px 6px 0 0', onclick: () => newFrom('B') }, ['Descending 7→5→3']),
       el('button', { class: 'btn small secondary', style: 'margin:4px 6px 0 0', onclick: () => newFrom('D') }, ['Top-Set Block (draft)']),
@@ -46,8 +48,10 @@
       const actions = el('div', { class: 'chips' });
       actions.appendChild(el('button', { class: 'btn small ghost', onclick: () => Builder.openCycleEditor(c) }, ['Edit']));
       actions.appendChild(el('button', { class: 'btn small ghost', onclick: () => cloneCycle(c) }, ['Clone']));
-      if (c.status !== 'active') actions.appendChild(el('button', { class: 'btn small', onclick: () => activate(c) }, ['Activate']));
-      if (c.status === 'active') actions.appendChild(el('button', { class: 'btn small ghost', onclick: () => setStatus(c, 'archived') }, ['Archive']));
+      if (c.status !== 'active') actions.appendChild(el('button', { class: 'btn small',
+        onclick: () => activate(c) }, [c.status === 'paused' ? 'Resume' : 'Activate']));
+      if (c.status === 'active') actions.appendChild(el('button', { class: 'btn small ghost', onclick: () => setStatus(c, 'paused') }, ['Pause']));
+      if (c.status !== 'archived') actions.appendChild(el('button', { class: 'btn small ghost', onclick: () => setStatus(c, 'archived') }, ['Archive']));
       actions.appendChild(el('button', { class: 'btn small ghost', onclick: () => delCycle(c) }, ['Delete']));
       card.appendChild(actions);
       view.appendChild(card);
@@ -58,10 +62,21 @@
     const c = which === 'A' ? Templates.templateA()
             : which === 'B' ? Templates.templateB()
             : which === 'D' ? Templates.templateD()
+            : which === 'P' ? Templates.templateP()
             : Templates.templateC();
     c.status = 'draft';
     await DB.save('cycles', c);
     Builder.openCycleEditor(c);
+  }
+
+  // One-tap: create the block-pull data block and activate it. No Working Max
+  // is seeded because pickups deliberately opt out of the WM system — the
+  // program never prescribes a load, and a 3s pickup max would collide with
+  // the 3s HANG max already on file (the WM store keys on duration alone).
+  async function startBlockPullBlock() {
+    const c = Templates.templateP();
+    await DB.save('cycles', c);
+    await activate(c);
   }
 
   // One-tap: create the 4-Week Top-Set Block, ensure a 3s Working Max anchor
@@ -93,9 +108,19 @@
   }
 
   // ---- 10.5 activate ----------------------------------------------------
+  // Standing a cycle down now PAUSES it rather than archiving it: a block you
+  // interrupt to run something else is one you intend to come back to, and
+  // 'archived' made that a rebuild. DB.activeCycle excludes paused cycles from
+  // its read-time fallback, so a paused block can never silently resurrect
+  // itself on a device where the active flag went missing.
+  //
+  // This also repairs the pre-existing double-active state (two cycles both
+  // flagged 'active' left DB.activeCycle's self-heal choosing between them):
+  // every currently-active cycle is stood down here, so exactly one survives.
   async function activate(c) {
     const all = await DB.getAll('cycles');
-    await Promise.all(all.filter(x => x.status === 'active').map(x => { x.status = 'archived'; return DB.save('cycles', x); }));
+    await Promise.all(all.filter(x => x.status === 'active' && x.id !== c.id)
+      .map(x => { x.status = 'paused'; return DB.save('cycles', x); }));
     c.status = 'active';
     c.generatedWeeks = Calc.expandCycle(c); // derived snapshot
     await DB.save('cycles', c);

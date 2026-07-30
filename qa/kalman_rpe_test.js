@@ -47,14 +47,25 @@ function mkHist(seed, n, withRpe) {
 }
 const strip = h => h.map(p => ({ x: p.x, y: p.y }));
 
+// STALE-TEST FIX (2026-07-30): T1 stripped rObs/rpeWeighted from the NEW side
+// only. That was right when OLD was the pre-RPE version, but the RPE work has
+// since been committed, so HEAD carries those fields too and the one-sided
+// strip guaranteed a mismatch — 30/30 red regardless of the working tree.
+// Verified by running HEAD against itself through the same comparison.
+// Now normalised on both sides, which is what the test always meant.
+const cmp = (r) => {
+  if (!r) return r;
+  const c = JSON.parse(JSON.stringify(r));
+  delete c.rObs; delete c.rpeWeighted;
+  return c;
+};
+
 // T1: no-rpe input -> NEW identical to OLD (30 random histories, incl. n=3,4 edge)
 for (let s = 1; s <= 30; s++) {
   const h = mkHist(s, s < 4 ? 3 + s : 5 + (s % 20), false);
-  const a = OLD(h, { horizonWeeks: 6 });
-  const b = NEW(h, { horizonWeeks: 6 });
-  const bb = b && JSON.parse(JSON.stringify(b));
-  if (bb) { delete bb.rObs; delete bb.rpeWeighted; }
-  ok(JSON.stringify(a) === JSON.stringify(bb), 'T1 regression seed ' + s);
+  const a = cmp(OLD(h, { horizonWeeks: 6 }));
+  const b = cmp(NEW(h, { horizonWeeks: 6 }));
+  ok(JSON.stringify(a) === JSON.stringify(b), 'T1 regression seed ' + s);
 }
 
 // T2: uniform rpe (all @9) -> weights normalize to exactly 1 -> equals no-rpe run

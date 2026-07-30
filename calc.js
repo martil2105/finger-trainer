@@ -14,6 +14,78 @@
   function lerp(a, b, f) { return a + (b - a) * f; }
   function avg(arr) { return arr.reduce((s, v) => s + v, 0) / arr.length; }
 
+  // ---- record accessors (modality + nested hands) -----------------------
+  // Two training modalities share one log store:
+  //   'hang'   — bilateral hangboard. One load per session, stored flat in
+  //              topSetLoadKg / topSetRPE / e1rmKg, and it means ADDED weight
+  //              (total force = bodyweight + added).
+  //   'pickup' — one-handed edge block pulls. Two loads per session, stored
+  //              under hands.L / hands.R, and the load IS the force (no
+  //              bodyweight component).
+  //
+  // Records written before pickups existed carry neither field. They are
+  // defaulted at READ time, never migrated: a migration pass would restamp
+  // updatedAt on every row and trigger a full re-upload and merge storm
+  // through Gist sync.
+  //
+  // Deliberate invariant: pickup records leave the FLAT fields null. Every
+  // pre-existing hang query is guarded by `topSetLoadKg != null` or
+  // `e1rmKg != null`, so pickups self-exclude from hang analytics, hang
+  // benchmarks and hang Working Maxes without a single call site changing.
+  // Anything that wants pickup data has to ask for it by hand.
+  const HANDS = ['L', 'R'];
+  function modalityOf(e) { return (e && e.modality) || 'hang'; }
+  function isPickup(e) { return modalityOf(e) === 'pickup'; }
+  function handSide(e, hand) {
+    if (!e || !e.hands || !hand) return null;
+    const h = e.hands[hand];
+    return (h && typeof h === 'object' && !Array.isArray(h)) ? h : null;
+  }
+  // Which sides carry data? Hangs are bilateral and report a single number,
+  // so they answer [null] and callers can loop over both shapes uniformly.
+  function handsOf(e) {
+    if (!isPickup(e)) return [null];
+    return HANDS.filter(h => {
+      const s = handSide(e, h);
+      return s && s.topSetLoadKg != null;
+    });
+  }
+  function sideField(e, hand, field, flat) {
+    if (!e) return null;
+    if (isPickup(e)) {
+      const s = handSide(e, hand);
+      return (s && s[field] != null) ? s[field] : null;
+    }
+    return e[flat] != null ? e[flat] : null;
+  }
+  function topLoad(e, hand) { return sideField(e, hand, 'topSetLoadKg', 'topSetLoadKg'); }
+  function topRPE(e, hand) { return sideField(e, hand, 'topSetRPE', 'topSetRPE'); }
+  function e1rmOf(e, hand) { return sideField(e, hand, 'e1rmKg', 'e1rmKg'); }
+  function setsDetailOf(e, hand) {
+    if (!e) return null;
+    if (isPickup(e)) {
+      const s = handSide(e, hand);
+      return (s && Array.isArray(s.setsDetail)) ? s.setsDetail : null;
+    }
+    return Array.isArray(e.setsDetail) ? e.setsDetail : null;
+  }
+  // Session-level hold duration. Hangs called it hangDurationSeconds; pickups
+  // use holdSeconds. One accessor so charts don't care which wrote the record.
+  function holdSecondsOf(e) {
+    if (!e) return null;
+    if (e.holdSeconds != null) return e.holdSeconds;
+    return e.hangDurationSeconds != null ? e.hangDurationSeconds : null;
+  }
+  // A top set whose position broke is a contaminated observation: the load is
+  // real but it doesn't mean what a clean rep means. Used to inflate that
+  // session's observation noise in the filter (see kalman_data.js).
+  function topSetDegraded(e, hand) {
+    const d = setsDetailOf(e, hand);
+    if (!d || !d.length) return false;
+    const o = d[0] && d[0].outcome;
+    return o === 'degraded' || o === 'failed';
+  }
+
   // ---- 6.1 E1RM ---------------------------------------------------------
   // Computed for Yielding roles down to RPE 5 (matches the logging floor).
   // The %1RM model is linear — %1RM = 40 + 6*RPE — so it extends fine; just
@@ -21,9 +93,18 @@
   // which is acceptable here since E1RM is used to track the trend over time.
   // hangDuration: 3s hangs yield ~10% higher loads at the same RPE — divide by 1.1
   // to normalise to a 5s-equivalent so the E1RM trend stays on one comparable scale.
-  function e1rm(loadKg, rpe, hangDuration) {
+  //
+  // modality: that ÷1.1 was measured from Martin's own 5s vs 3s HANG data. It
+  // has no meaning for pickups, which only ever run one hold duration and so
+  // need no cross-duration normalisation at all — passing 'pickup' returns the
+  // raw figure. (The %1RM model itself is a barbell heuristic already stretched
+  // to hangs; stretching it again is one more extrapolation, tolerable here
+  // because E1RM is only ever read as a trend, and it stays monotone in both
+  // load and RPE.)
+  function e1rm(loadKg, rpe, hangDuration, modality) {
     if (loadKg == null || rpe == null || rpe < 5) return null;
     const raw = roundTo(loadKg * 100 / (40 + 6 * rpe), 1);
+    if (modality === 'pickup') return raw;
     return hangDuration === 3 ? roundTo(raw / 1.1, 1) : raw;
   }
 
@@ -114,6 +195,13 @@
         wk.volumeSets = block.volume ? block.volume.sets : 0;
         wk.oiSets = (block.oi && block.oi.sets !== undefined) ? block.oi.sets : '3-5';
         wk.warmup = (block.heavy && block.heavy.warmup) ? block.heavy.warmup : null;
+        // Pickup-block fields. Hang blocks leave these null/1 and every
+        // existing consumer behaves exactly as before.
+        wk.modality = block.modality || 'hang';
+        wk.repsPerSet = hv.repsPerSet != null ? hv.repsPerSet : 1;
+        wk.rampPcts = Array.isArray(hv.rampPcts) ? hv.rampPcts.slice() : null;
+        wk.edgeMm = hv.edgeMm != null ? hv.edgeMm : null;
+        wk.grip = hv.grip || null;
       }
       weeks.push(wk);
     }
@@ -169,6 +257,20 @@
     if (w.heavyProtocol === 'deloadTest') {
       w.deloadAnchorKg = deloadAnchor(wmFor(5));
       w.heavyAnchorKg = w.deloadAnchorKg;
+      return w;
+    }
+    if (w.modality === 'pickup') {
+      // Pickups deliberately opt OUT of the Working Max system. WMs exist to
+      // drive heavyAnchor() -> a prescribed load, and this program never
+      // prescribes load: the ramp and the back-offs are both percentages of a
+      // top set discovered on the day. The only anchor is the last CLEAN top
+      // set per hand, which lives in the log rather than in a stored max, so
+      // app.js fills it in. This also sidesteps the fact that the WM store is
+      // keyed on durationSeconds alone — a 3s pickup max and a 3s hang max
+      // would otherwise collide on the same key.
+      w.heavyAnchorKg = null;
+      w.backoffAnchorKg = null;
+      w.wmMissing = false;
       return w;
     }
     const wm = wmFor(w.heavyDuration);
@@ -245,8 +347,10 @@
 
     // 1. Missing WM for any heavy duration used.
     const needed = new Set();
+    const allPickup = blocks.length > 0 && blocks.every(b => b && b.modality === 'pickup');
     blocks.forEach(b => {
       if (b.isDeloadTest) return;
+      if (b.modality === 'pickup') return;   // opts out of the WM system (see annotateWeekAnchors)
       if (b.heavy && b.heavy.hangDurationSeconds) needed.add(b.heavy.hangDurationSeconds);
     });
     needed.forEach(d => {
@@ -288,8 +392,11 @@
       }
     }
 
-    // 5. No deload/test block at all.
-    if (!blocks.some(b => b.isDeloadTest)) {
+    // 5. No deload/test block at all. Suppressed for an all-pickup cycle: that
+    // program has no scheduled deload BY DESIGN (a prescribed deload week would
+    // be a guess, and the top-set trend is the better signal), and it doesn't
+    // use Working Maxes, so there is no anchor for a test to refresh.
+    if (!allPickup && !blocks.some(b => b.isDeloadTest)) {
       warns.push({ id: 'noDeload', message:
         "No benchmark test in this cycle — you won't have a fresh anchor for the next one." });
     }
@@ -297,7 +404,7 @@
     // 6. Heavy day and board/limit day < 2 days apart.
     const ws = cycle.weeklyStructure || {};
     const order = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-    const heavyDays = order.filter(d => ws[d] === 'Heavy');
+    const heavyDays = order.filter(d => ws[d] === 'Heavy' || ws[d] === 'Pickup');
     const boardDays = order.filter(d => ws[d] === 'OIprimer' || ws[d] === 'Climb' || ws[d] === 'Board');
     let close = false;
     heavyDays.forEach(h => boardDays.forEach(b => {
@@ -342,6 +449,8 @@
 
   const Calc = {
     roundTo, roundTo05, roundTo025, lerp, avg,
+    HANDS, modalityOf, isPickup, handsOf, topLoad, topRPE, e1rmOf,
+    setsDetailOf, holdSecondsOf, topSetDegraded,
     e1rm, heavyAnchor, volumeAnchor, backoffAnchor, deloadAnchor,
     expandBlock, expandCycle, annotateWeekAnchors,
     recoveryFlag, deloadTrend, wmJumpGuard, guardrails,

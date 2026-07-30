@@ -164,9 +164,13 @@
         const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
         todayIso = d.toISOString().slice(0, 10);
       } catch (e) { todayIso = new Date().toISOString().slice(0, 10); }
+      // A paused or archived cycle was deliberately stood down — it must never
+      // win the fallback, or pausing the hang block would silently resurrect it
+      // the moment the pickup cycle's active flag went missing on one device.
+      const eligible = all.filter(c => c && c.status !== 'paused' && c.status !== 'archived');
       const containsToday = (typeof Calc !== 'undefined' && Calc.weekNumberFor)
-        ? all.filter(c => Calc.weekNumberFor(c, todayIso) != null) : [];
-      const pool = containsToday.length ? containsToday : all.slice();
+        ? eligible.filter(c => Calc.weekNumberFor(c, todayIso) != null) : [];
+      const pool = containsToday.length ? containsToday : (eligible.length ? eligible.slice() : []);
       pool.sort((a, b) => (a.startDate < b.startDate ? 1 : (a.startDate > b.startDate ? -1 : 0)));
       return pool[0] || null;
     });
@@ -180,9 +184,26 @@
 
   function addLog(entry) {
     if (!entry.id) entry.id = Templates.uid();
-    // recompute E1RM for Yielding roles (3s hangs normalised ÷1.1 to 5s-equivalent)
-    const yielding = entry.type === 'Yielding';
-    entry.e1rmKg = yielding ? Calc.e1rm(entry.topSetLoadKg, entry.topSetRPE, entry.hangDurationSeconds) : null;
+    if ((entry.modality || 'hang') === 'pickup') {
+      // Per-hand E1RM lives under hands.L / hands.R. The FLAT e1rmKg stays
+      // null deliberately — see the accessor block in calc.js: null flat
+      // fields are what keep pickups out of every pre-existing hang query
+      // (analytics series, deloadTrend, auto-PR benchmarks) without editing
+      // a single one of those call sites.
+      entry.e1rmKg = null;
+      entry.topSetLoadKg = null;
+      entry.topSetRPE = null;
+      ['L', 'R'].forEach(h => {
+        const s = entry.hands && entry.hands[h];
+        if (s && typeof s === 'object') {
+          s.e1rmKg = Calc.e1rm(s.topSetLoadKg, s.topSetRPE, entry.holdSeconds, 'pickup');
+        }
+      });
+    } else {
+      // recompute E1RM for Yielding roles (3s hangs normalised ÷1.1 to 5s-equivalent)
+      const yielding = entry.type === 'Yielding';
+      entry.e1rmKg = yielding ? Calc.e1rm(entry.topSetLoadKg, entry.topSetRPE, entry.hangDurationSeconds) : null;
+    }
     entry.updatedAt = nowIso();
     return put('logEntries', entry).then(() => entry);
   }
@@ -217,9 +238,18 @@
   // content signature, keeping ONE deterministic winner so every device
   // converges on the same surviving row.
   function logKey(e) {
-    return ['log', e.date, e.type, e.role, e.venue,
+    // Modality and the per-hand loads MUST be part of the signature. Every
+    // pickup record leaves the flat load/RPE/duration fields null, so without
+    // the hand terms two different pickup sessions that share a date and notes
+    // produce an IDENTICAL key — dedupe() would then delete one of them and
+    // every device would converge on the loss. Silent, unrecoverable.
+    const hands = ['L', 'R'].map(h => {
+      const s = e.hands && e.hands[h];
+      return s ? [h, s.topSetLoadKg, s.topSetRPE, (s.setsDetail || []).length].join(':') : '';
+    }).join(',');
+    return ['log', e.date, (e.modality || 'hang'), e.type, e.role, e.venue,
             e.topSetLoadKg, e.topSetRPE, e.sets, e.hangDurationSeconds,
-            e.notes].join('|');
+            e.holdSeconds, hands, e.notes].join('|');
   }
   function wmKey(w) {
     return ['wm', w.date, w.durationSeconds, w.valueKg].join('|');
@@ -231,8 +261,13 @@
     // re-saving/editing a Test logs a fresh benchmark; collapse identical ones
     return ['bench', b.date, b.durationSeconds, b.maxLoadKg, b.rpe].join('|');
   }
+  // Dedupe preference when two copies of a cycle collide: an active copy must
+  // beat a stood-down one, so collapsing duplicates can never leave Today with
+  // "No active cycle". 'paused' outranks 'archived' — it is a cycle you intend
+  // to come back to.
   function statusRank(x) {
-    return (x && x.status === 'active') ? 0 : (x && x.status === 'draft') ? 1 : 2;
+    const s = x && x.status;
+    return s === 'active' ? 0 : s === 'draft' ? 1 : s === 'paused' ? 2 : s === 'archived' ? 4 : 3;
   }
   function preferred(a, b) {
     // Deterministic winner so every device converges on the same row.

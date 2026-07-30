@@ -149,6 +149,20 @@
     // isLastBlockWeek: true if the next week belongs to a different block (used for Peak W14 guidance)
     const isLastBlockWeek = !weeks[wk] || weeks[wk].blockName !== week.blockName;
 
+    if (structRole === 'Pickup') {
+      // One-handed edge block pulls. No `anchor`: this program never
+      // prescribes a load. Both the ramp and the back-offs are percentages —
+      // the ramp of each hand's last CLEAN top set, the back-offs of the top
+      // set found today — so the only reference is history, which renderToday
+      // attaches as `lastTop` (buildPlan is sync and has no DB access).
+      return { rest: false, role: 'Pickup', week: wk, blockName: week.blockName,
+        modality: 'pickup',
+        duration: week.heavyDuration, rpe: week.heavyRPE, protocol: week.heavyProtocol,
+        sets: week.heavySets, repsPerSet: week.repsPerSet, rampPcts: week.rampPcts,
+        backoffPctOfTop: week.backoffPctOfTop, intraRestSeconds: 20,
+        edgeMm: week.edgeMm, grip: week.grip,
+        anchor: null, lastTop: null, firstHand: 'L', isLastBlockWeek };
+    }
     if (structRole === 'Heavy') {
       return { rest: false, role: 'Heavy', week: wk, blockName: week.blockName,
         duration: week.heavyDuration, rpe: week.heavyRPE, protocol: week.heavyProtocol,
@@ -166,6 +180,34 @@
         note: 'Overcoming isometrics — max-intent press/pull against a fixed surface, ~5s. Neural primer, then limit board.' };
     }
     return { rest: true, week: wk, blockName: week.blockName };
+  };
+
+  // Most recent CLEAN top set per hand, from newest-first logs.
+  // "Clean" is load-bearing here: the ramp and every back-off key off this
+  // number, so anchoring to a session where the position broke would carry a
+  // load forward that was never actually expressed in position — the error
+  // compounds week over week and nothing in the numbers would show it.
+  App.lastCleanTops = function (logs) {
+    const out = { L: null, R: null, dates: { L: null, R: null }, staleL: false, staleR: false };
+    Calc.HANDS.forEach(h => {
+      let fallback = null, fallbackDate = null;
+      for (let i = 0; i < logs.length; i++) {
+        const l = logs[i];
+        if (!Calc.isPickup(l)) continue;
+        const load = Calc.topLoad(l, h);
+        if (load == null) continue;
+        if (Calc.topSetDegraded(l, h)) {
+          if (fallback == null) { fallback = load; fallbackDate = l.date; }
+          continue;
+        }
+        out[h] = load; out.dates[h] = l.date;
+        return;
+      }
+      // Every logged top set for this hand broke position — fall back to the
+      // most recent one rather than showing nothing, but say so.
+      if (fallback != null) { out[h] = fallback; out.dates[h] = fallbackDate; out['stale' + h] = true; }
+    });
+    return out;
   };
 
   // ---- main router ------------------------------------------------------
@@ -281,6 +323,10 @@
         el('p', { class: 'muted', style: 'margin:0 0 6px' }, [plan.note || 'No fingers today. Sleep + mobility.']),
         next ? el('p', { class: 'sub', style: 'margin:0' }, [`Next session: ${next.label} — ${fmtDate(next.date)}`]) : el('span', null, [''])
       ]));
+    } else if (plan.modality === 'pickup') {
+      const tops = App.lastCleanTops(logs);
+      await attachPickupRefs(plan, logs);
+      view.appendChild(pickupSessionCard(plan, { blockType: curWeek && curWeek.blockType, tops }));
     } else {
       const lastSession = logs.find(l => l.type === 'Yielding' && l.hangDurationSeconds === plan.duration && l.topSetLoadKg != null);
       view.appendChild(sessionCard(plan, { blockType: curWeek && curWeek.blockType, lastSession }));
@@ -290,7 +336,86 @@
     view.appendChild(el('button', { class: 'btn secondary', onclick: () => showWorkoutPicker(cycle, weeks, wmFor, plan) }, ['Do a different workout →']));
 
     // log-without-runner quick action
-    view.appendChild(el('button', { class: 'btn secondary', onclick: () => App.openManualLog() }, ['Log a session manually']));
+    const pickupCycle = (cycle && cycle.modality === 'pickup') || plan.modality === 'pickup';
+    view.appendChild(el('button', { class: 'btn secondary',
+      onclick: () => pickupCycle ? App.openPickupLog() : App.openManualLog() }, ['Log a session manually']));
+    if (pickupCycle) {
+      view.appendChild(el('button', { class: 'btn ghost small',
+        onclick: () => App.openManualLog() }, ['Log a hang session instead']));
+    }
+  }
+
+  // Fill the runtime references a pickup plan can't know statically: each
+  // hand's last clean top set (the ramp basis) and which hand leads. Hand
+  // order is fixed per athlete rather than alternated — swapping it would put
+  // an unmodelled order effect into a dataset whose whole point is that the
+  // sessions are identical.
+  async function attachPickupRefs(plan, logs) {
+    const tops = App.lastCleanTops(logs || await DB.logsNewestFirst());
+    plan.lastTop = { L: tops.L, R: tops.R };
+    plan.firstHand = (await DB.getMeta('pickupFirstHand')) === 'R' ? 'R' : 'L';
+    return plan;
+  }
+
+  function pickupSessionCard(plan, ctx) {
+    const c = el('div', { class: 'card', style: 'padding:16px' });
+    const tops = (ctx && ctx.tops) || { L: null, R: null, dates: {} };
+    c.appendChild(el('div', { class: 'row' }, [
+      el('h2', { style: 'margin:0;font-size:18px' }, ['Block pull']),
+      el('span', { class: 'tint-chip blue',
+        style: 'text-transform:uppercase;letter-spacing:0.6px;font-size:10px;font-weight:800;padding:5px 11px' },
+        [plan.edgeMm ? plan.edgeMm + 'MM' : 'PICKUP'])
+    ]));
+    const bits = [];
+    if (plan.repsPerSet) bits.push(`${plan.repsPerSet} × ${plan.duration}s`);
+    bits.push(`top set + ${plan.sets} back-offs`);
+    bits.push('per hand · alternating');
+    c.appendChild(el('p', { class: 'sc-meta' }, [bits.join(' · ')]));
+
+    // Per-hand reference. Explicitly NOT a prescription — the top set is
+    // discovered, and this is only what it was last time.
+    const grid = el('div', { class: 'grid2', style: 'margin:10px 0' });
+    Calc.HANDS.forEach(h => {
+      const v = tops[h];
+      const stale = tops['stale' + h];
+      grid.appendChild(el('div', null, [
+        el('p', { class: 'micro anchor-label' }, [h === 'L' ? 'Left · last clean' : 'Right · last clean']),
+        v != null
+          ? el('div', { class: 'hero-readout', style: 'margin:0' }, [
+              el('span', { class: 'hero-num', 'data-countup': '' }, [String(v)]),
+              el('span', { class: 'hero-unit' }, ['kg'])
+            ])
+          : el('div', { style: 'font-size:18px;font-weight:800' }, ['find it']),
+        el('p', { class: 'anchor-last', style: 'margin:2px 0 0' }, [
+          v == null ? 'no history yet'
+            : stale ? 'position broke last time — repeat it'
+            : (tops.dates && tops.dates[h] ? fmtDate(tops.dates[h]) : '')
+        ])
+      ]));
+    });
+    c.appendChild(grid);
+
+    if (plan.rampPcts && plan.rampPcts.length) {
+      const ladderFor = (h) => tops[h] == null ? null
+        : plan.rampPcts.map(p => Calc.roundTo05(tops[h] * p) + 'kg').join(' → ');
+      const lL = ladderFor('L'), lR = ladderFor('R');
+      c.appendChild(el('div', { class: 'callout' }, [
+        lL || lR
+          ? `Ramp (1 rep each, hands alternating): L ${lL || '—'} · R ${lR || '—'}. Prime, don't fatigue.`
+          : `Ramp at ${plan.rampPcts.map(p => Math.round(p * 100) + '%').join(' → ')} of your top set — first session, so find it by feel in small steps.`
+      ]));
+    }
+
+    c.appendChild(el('div', { class: 'callout' }, [
+      `Top set: ${plan.repsPerSet} reps at RIR 1–2, judged against technical failure — the rep where position would break. ` +
+      `Back-offs: ${plan.sets} sets at ${Math.round((plan.backoffPctOfTop || 0.88) * 100)}% of today's top. Reps are fixed; don't stop on feel.`
+    ]));
+    c.appendChild(el('p', { class: 'rules-line' }, [
+      'Ramp to the weight over ~2s, no snatch. A rep where the fingers rolled open is logged degraded and will not advance the load. Pain stops the session.'
+    ]));
+    if (plan.note) c.appendChild(el('p', { class: 'muted' }, [plan.note]));
+    c.appendChild(el('button', { class: 'btn start', onclick: () => Runner.start(plan) }, ['Start session']));
+    return c;
   }
 
   function showWorkoutPicker(cycle, weeks, wmFor, todayPlan) {
@@ -299,7 +424,7 @@
     const weekStartIso = Calc.addDays(cycle.startDate, (weekNum - 1) * 7);
     const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const roleLabelMap = { Heavy: 'Heavy yielding', Volume: 'Volume yielding', OIprimer: 'OI primer',
-                           Test: 'Benchmark test', Deload: 'Deload' };
+                           Test: 'Benchmark test', Deload: 'Deload', Pickup: 'Block pull' };
 
     const options = [];
     for (let i = 0; i < 7; i++) {
@@ -318,7 +443,14 @@
 
     const body = options.map(({ dayName, plan }) => {
       const label = roleLabelMap[plan.role] || plan.role;
-      const btn = el('button', { class: 'list-item', onclick: () => { App.closeSheet(); Runner.start(plan); } });
+      const btn = el('button', { class: 'list-item', onclick: async () => {
+        App.closeSheet();
+        // Pickup plans carry no anchors until history is attached (see
+        // attachPickupRefs) — starting one straight from the picker would
+        // otherwise ramp off nothing.
+        if (plan.modality === 'pickup') await attachPickupRefs(plan);
+        Runner.start(plan);
+      } });
       btn.appendChild(el('div', { class: 'row' }, [
         el('strong', null, [dayName]),
         el('span', { class: 'pill accent' }, [label])
@@ -433,7 +565,7 @@
     for (let i = 1; i <= 14; i++) {
       const d = Calc.addDays(todayISO(), i);
       const p = App.buildPlan(cycle, weeks, d, wmFor);
-      if (!p.rest) return { date: d, label: { Heavy: 'Heavy', Volume: 'Volume', OIprimer: 'OI primer', Test: 'Test', Deload: 'Deload' }[p.role] };
+      if (!p.rest) return { date: d, label: { Heavy: 'Heavy', Volume: 'Volume', OIprimer: 'OI primer', Test: 'Test', Deload: 'Deload', Pickup: 'Block pull' }[p.role] || p.role };
     }
     return null;
   }
@@ -724,17 +856,56 @@
   function monthShort(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short' }); }
   function dowShort(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' }); }
 
+  App.state.analyticsModality = null;   // null = auto-pick on first render
+
+  const HAND_COLOR = { L: '#F0A24E', R: '#3D87F5' };   // same as the runner
+  const HAND_NAME = { L: 'Left', R: 'Right' };
+
   async function renderAnalytics(view) {
+    const allLogs = (await DB.logsNewestFirst()).slice().reverse(); // oldest -> newest
+    const anyPickup = allLogs.some(l => Calc.isPickup(l));
+    const anyHang = allLogs.some(l => !Calc.isPickup(l) && l.e1rmKg != null);
+    if (App.state.analyticsModality == null) {
+      App.state.analyticsModality = anyPickup ? 'pickup' : 'hang';
+    }
+    const mode = App.state.analyticsModality;
+
+    // Modality switch sits ABOVE the range toggle. Hang and pickup loads are
+    // not on the same scale and never share an axis — a hang number is ADDED
+    // weight on top of bodyweight across two hands, a pickup number is the
+    // whole force on one hand. They happen to land in a similar range, which
+    // makes silently mixing them the most plausible way to get a chart that
+    // looks fine and means nothing.
+    if (anyPickup && anyHang) {
+      view.appendChild(el('div', { class: 'row', style: 'margin:4px 0 8px' }, [
+        el('h1', { style: 'margin:0' }, ['Analytics']),
+        el('div', { class: 'seg' }, [
+          el('button', { class: mode === 'pickup' ? 'sel' : '', onclick: () => { App.state.analyticsModality = 'pickup'; App.render(); } }, ['Pickup']),
+          el('button', { class: mode === 'hang' ? 'sel' : '', onclick: () => { App.state.analyticsModality = 'hang'; App.render(); } }, ['Hang'])
+        ])
+      ]));
+      if (mode === 'pickup') return renderPickupAnalytics(view, allLogs);
+      view.appendChild(el('p', { class: 'card-note', style: 'margin:-4px 0 10px' }, ['Hangboard history — separate scale from block pulls.']));
+      return renderHangAnalytics(view, allLogs, true);
+    }
+    if (mode === 'pickup' && anyPickup) {
+      view.appendChild(el('h1', { style: 'margin:4px 0 10px' }, ['Analytics']));
+      return renderPickupAnalytics(view, allLogs);
+    }
+    return renderHangAnalytics(view, allLogs, false);
+  }
+
+  async function renderHangAnalytics(view, preLogs, headerDone) {
     // header row: title + Cycle | All range toggle
     view.appendChild(el('div', { class: 'row', style: 'margin:4px 0 10px' }, [
-      el('h1', { style: 'margin:0' }, ['Analytics']),
+      headerDone ? el('span', null, ['']) : el('h1', { style: 'margin:0' }, ['Analytics']),
       el('div', { class: 'seg' }, [
         el('button', { class: App.state.analyticsRange === 'all' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'all'; App.render(); } }, ['All']),
         el('button', { class: App.state.analyticsRange === 'cycle' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'cycle'; App.render(); } }, ['Cycle'])
       ])
     ]));
 
-    const logs = (await DB.logsNewestFirst()).slice().reverse(); // oldest -> newest
+    const logs = preLogs || (await DB.logsNewestFirst()).slice().reverse(); // oldest -> newest
     const yielding = logs.filter(l => l.type === 'Yielding' && l.e1rmKg != null);
     const cycle = await DB.activeCycle();
     const wmFor = await wmForFn();
@@ -1068,6 +1239,396 @@
       });
       view.appendChild(el('div', { class: 'card' }, [t]));
     }
+  }
+
+  // =====================================================================
+  // ANALYTICS · PICKUP
+  // =====================================================================
+  async function renderPickupAnalytics(view, logs) {
+    view.appendChild(el('div', { class: 'row', style: 'margin:0 0 10px' }, [
+      el('span', { class: 'micro' }, ['Block pull · one hand at a time']),
+      el('div', { class: 'seg' }, [
+        el('button', { class: App.state.analyticsRange === 'all' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'all'; App.render(); } }, ['All']),
+        el('button', { class: App.state.analyticsRange === 'cycle' ? 'sel' : '', onclick: () => { App.state.analyticsRange = 'cycle'; App.render(); } }, ['Cycle'])
+      ])
+    ]));
+
+    const cycle = await DB.activeCycle();
+    const cycStart = cycle ? cycle.startDate : null;
+    const isAll = App.state.analyticsRange === 'all';
+    const pickups = logs.filter(l => Calc.isPickup(l) &&
+      (isAll || !cycStart || l.date >= cycStart));
+
+    if (pickups.length < 1) {
+      view.appendChild(el('div', { class: 'card' }, ['No block-pull sessions logged yet.']));
+      return;
+    }
+
+    // ---- RPE curve. Spacing between RPE points is a property of the PERSON,
+    // not of the exercise, so pickup analytics can borrow the hang-calibrated
+    // curve until it has enough of its own sessions to validate one. Stated in
+    // the card note either way — a borrowed constant should never look native.
+    const pickPts = [];
+    pickups.forEach(l => Calc.HANDS.forEach(h => {
+      const load = Calc.topLoad(l, h), rpe = Calc.topRPE(l, h);
+      if (load != null && rpe != null) pickPts.push({ date: l.date, load, rpe, dur: 5 });
+    }));
+    const hangPts = logs.filter(l => !Calc.isPickup(l) && l.topSetLoadKg != null && l.topSetRPE != null)
+      .map(l => ({ date: l.date, load: l.topSetLoadKg, rpe: l.topSetRPE, dur: l.hangDurationSeconds }));
+    let rpeCal = (typeof fitRpeCurve === 'function') ? fitRpeCurve(pickPts) : { k: 0.06, source: 'default', n: 0 };
+    let calSource = rpeCal.source === 'calibrated' ? 'pickup' : null;
+    if (!calSource && typeof fitRpeCurve === 'function') {
+      const fromHangs = fitRpeCurve(hangPts);
+      if (fromHangs.source === 'calibrated') { rpeCal = fromHangs; calSource = 'hang'; }
+    }
+    const calOn = !!calSource;
+    // dur 5 => the ÷1.1 cross-duration path is skipped. Pickups run one hold
+    // length, so there is nothing to normalise between.
+    const e1Of = (load, rpe, stored) => {
+      if (calOn && load != null && rpe != null) {
+        const v = rpeCal.e1rm(load, rpe, 5);
+        if (v != null) return v;
+      }
+      if (stored != null) return stored;
+      return Calc.e1rm(load, rpe, null, 'pickup');
+    };
+
+    const series = {};
+    Calc.HANDS.forEach(h => {
+      series[h] = pickups.map(l => {
+        const load = Calc.topLoad(l, h);
+        if (load == null) return null;
+        const rpe = Calc.topRPE(l, h);
+        const y = e1Of(load, rpe, Calc.e1rmOf(l, h));
+        return y == null ? null : { x: l.date, y, rpe, degraded: Calc.topSetDegraded(l, h) };
+      }).filter(Boolean);
+    });
+
+    // ---- hero: both hands, one axis ------------------------------------
+    const hero = el('div', { class: 'card', style: 'padding:16px 14px 12px;margin-top:0' });
+    const lastOf = h => series[h].length ? series[h][series[h].length - 1].y : null;
+    const deltaOf = h => series[h].length >= 2
+      ? Calc.roundTo(series[h][series[h].length - 1].y - series[h][0].y, 1) : null;
+    hero.appendChild(el('div', { class: 'row' }, [
+      el('span', { class: 'micro' }, ['Top-set E1RM · per hand']),
+      el('span', { class: 'micro' }, [isAll ? 'all-time' : 'this cycle'])
+    ]));
+    const readout = el('div', { class: 'row', style: 'align-items:flex-end;margin:2px 0 6px' });
+    Calc.HANDS.forEach(h => {
+      const d = deltaOf(h), v = lastOf(h);
+      readout.appendChild(el('div', null, [
+        el('span', { class: 'micro', style: `color:${HAND_COLOR[h]}` }, [HAND_NAME[h]]),
+        el('div', { class: 'hero-readout', style: 'margin:0' }, [
+          el('span', { class: 'hero-num', 'data-countup': '' }, [v != null ? String(v) : '—']),
+          el('span', { class: 'hero-unit' }, ['kg'])
+        ]),
+        d != null ? el('span', { class: 'tint-chip ' + (d >= 0 ? 'green' : 'amber') },
+          [`${d >= 0 ? '+' : '−'}${Math.abs(d)} kg`]) : el('span', { class: 'micro' }, [''])
+      ]));
+    });
+    hero.appendChild(readout);
+    if (series.L.length + series.R.length >= 4) {
+      hero.appendChild(lineChart([
+        { pts: series.L, color: HAND_COLOR.L, name: 'Left', trendColor: HAND_COLOR.L },
+        { pts: series.R, color: HAND_COLOR.R, name: 'Right', trendColor: HAND_COLOR.R }
+      ], 'kg', { movingAvg: true, prMarkers: false }));
+      hero.appendChild(el('p', { class: 'card-note', style: 'margin:4px 0 0' }, [
+        `orange = left · blue = right · thin = trend · ` +
+        (calSource === 'pickup'
+          ? `RPE curve: personal, ${(rpeCal.k * 100).toFixed(1)}%/pt from pickup sessions`
+          : calSource === 'hang'
+            ? `RPE curve: personal, ${(rpeCal.k * 100).toFixed(1)}%/pt — borrowed from your hang sessions until pickups calibrate their own (RPE spacing is a property of you, not the exercise)`
+            : 'RPE curve: generic 6%/pt')
+      ]));
+    } else {
+      hero.appendChild(el('p', { class: 'muted', style: 'margin:8px 0' }, ['Two sessions per hand and this chart starts.']));
+    }
+    view.appendChild(hero);
+
+    // ---- stat strip -----------------------------------------------------
+    const bestOf = h => series[h].length ? Math.max.apply(null, series[h].map(p => p.y)) : null;
+    const lastGap = (() => {
+      const a = lastOf('L'), b = lastOf('R');
+      if (a == null || b == null) return null;
+      const hi = Math.max(a, b);
+      return hi ? { pct: Math.round(((hi - Math.min(a, b)) / hi) * 1000) / 10, lead: a > b ? 'L' : (b > a ? 'R' : null) } : null;
+    })();
+    view.appendChild(el('div', { class: 'stat-strip' }, [
+      el('div', { class: 'ss-col' }, [
+        el('span', { class: 'ss-label' }, ['Best · left']),
+        el('span', { class: 'ss-value', 'data-countup': '' }, bestOf('L') != null ? [String(bestOf('L')), el('small', null, [' kg'])] : ['—']),
+        el('span', { class: 'ss-sub' }, [`${series.L.length} sessions`])
+      ]),
+      el('div', { class: 'ss-col' }, [
+        el('span', { class: 'ss-label' }, ['Best · right']),
+        el('span', { class: 'ss-value', 'data-countup': '' }, bestOf('R') != null ? [String(bestOf('R')), el('small', null, [' kg'])] : ['—']),
+        el('span', { class: 'ss-sub' }, [`${series.R.length} sessions`])
+      ]),
+      el('div', { class: 'ss-col' }, [
+        el('span', { class: 'ss-label' }, ['Latest gap']),
+        el('span', { class: 'ss-value' }, lastGap ? [String(lastGap.pct), el('small', null, ['%'])] : ['—']),
+        el('span', { class: 'ss-sub' }, [lastGap && lastGap.lead ? HAND_NAME[lastGap.lead] + ' stronger' : 'even'])
+      ])
+    ]));
+
+    // ---- asymmetry ------------------------------------------------------
+    view.appendChild(el('h2', null, ['Asymmetry']));
+    const paired = (typeof buildPairedKalmanTrack === 'function')
+      ? buildPairedKalmanTrack(
+          series.L.map(p => ({ x: p.x, y: p.y, rpe: p.rpe, degraded: p.degraded })),
+          series.R.map(p => ({ x: p.x, y: p.y, rpe: p.rpe, degraded: p.degraded })),
+          { horizonWeeks: 6, rpeK: rpeCal.k })
+      : null;
+    const asymCard = el('div', { class: 'card', style: 'margin-top:0' });
+    if (!paired) {
+      asymCard.appendChild(el('p', { class: 'muted', style: 'margin:0' }, [
+        'Three sessions with both hands and this starts. Until then the per-hand numbers above are the whole picture.'
+      ]));
+    } else {
+      const rawGap = [];
+      pickups.forEach(l => {
+        const a = Calc.topLoad(l, 'L'), b = Calc.topLoad(l, 'R');
+        if (a != null && b != null) rawGap.push({ x: l.date, y: Calc.roundTo(b - a, 1) });
+      });
+      asymCard.appendChild(lineChart([
+        { pts: rawGap, color: '#C9C9D6', name: 'per session' },
+        { pts: paired.asym.map(p => ({ x: p.x, y: p.y })), color: '#7A5AF8', name: 'filtered', trendColor: '#7A5AF8' }
+      ], 'kg', { movingAvg: false, prMarkers: false }));
+      const a = paired.asymNow;
+      // Factual, no corrective framing: an asymmetry is a measurement, not a
+      // fault, and the honest headline when it is inside one sigma is that the
+      // hands are indistinguishable — not that one is "behind".
+      asymCard.appendChild(el('p', { class: 'card-title', style: 'margin:10px 0 0;font-size:13px' }, [
+        a.resolved
+          ? `${HAND_NAME[a.lead] || '—'} is ahead by ${Math.abs(a.kg)} kg (${a.pct}%), ${a.sigma}σ — larger than the measurement noise.`
+          : `Gap ${Math.abs(a.kg)} kg (${a.pct}%) at ${a.sigma}σ — inside the noise. On this much data the two hands are not distinguishable.`
+      ]));
+      asymCard.appendChild(el('p', { class: 'card-note' }, [
+        'grey = raw per-session difference (right − left) · purple = filtered. The filter treats both hands as reads of one strength state plus a slowly drifting gap, ' +
+        'which estimates that gap ~20% more accurately than subtracting two separately smoothed lines (measured on synthetic athletes, qa/kalman_paired_farm.js). Display only.'
+      ]));
+    }
+    view.appendChild(asymCard);
+
+    // ---- day-of-week: the question the uniform block exists to answer ----
+    view.appendChild(el('h2', null, ['Day of week']));
+    view.appendChild(dayOfWeekCard(pickups, e1Of));
+
+    // ---- filtered strength, per hand ------------------------------------
+    view.appendChild(el('h2', null, ['Filtered strength · per hand']));
+    if (typeof buildKalmanTrack !== 'function' || typeof drawKalmanTrack !== 'function') {
+      view.appendChild(el('div', { class: 'card' }, ['Filtered-strength layer not loaded.']));
+    } else {
+      Calc.HANDS.forEach(h => {
+        const pts = series[h].map(p => ({ x: p.x, y: p.y, rpe: p.rpe, degraded: p.degraded }));
+        if (pts.length < 3) {
+          view.appendChild(el('div', { class: 'card' }, [`${HAND_NAME[h]}: three sessions needed to filter a trend.`]));
+          return;
+        }
+        const model = buildKalmanTrack(pts, { horizonWeeks: 6, rpeK: rpeCal.k });
+        if (!model) { view.appendChild(el('div', { class: 'card' }, [`${HAND_NAME[h]}: not enough signal yet.`])); return; }
+        const card = el('div', { class: 'card' });
+        card.appendChild(el('div', { class: 'row' }, [
+          el('span', { class: 'card-title', style: `color:${HAND_COLOR[h]}` }, [HAND_NAME[h] + ' hand']),
+          el('span', { class: 'micro' }, [`${model.n} sessions`])
+        ]));
+        drawKalmanTrack(pts, model, card, { unit: 'kg', todayX: todayISO() });
+        const kr = model.readiness;
+        card.appendChild(el('p', { class: 'card-title', style: 'margin:10px 0 0;font-size:13px' }, [
+          `Filtered ${kr.filtered} kg · trend ${(model.slopePerWeek >= 0 ? '+' : '−') + Math.abs(model.slopePerWeek)} kg/wk. ` +
+          `Last session ${(kr.deltaKg >= 0 ? '+' : '−') + Math.abs(kr.deltaKg)} kg (${kr.sigma}σ) — ${kr.band}.`
+        ]));
+        view.appendChild(card);
+      });
+      view.appendChild(el('p', { class: 'card-note', style: 'margin:2px 2px 0' }, [
+        'Each hand is filtered independently. The paired model above is better at the GAP but measurably worse at the level — ' +
+        'observing one hand tells you about that hand, not about a shared latent, and forcing the split leaks noise into both. Display only.'
+      ]));
+    }
+
+    // ---- position integrity ---------------------------------------------
+    view.appendChild(el('h2', null, ['Position']));
+    view.appendChild(positionCard(pickups));
+
+    // ---- context: readiness + climbing load ------------------------------
+    view.appendChild(el('h2', null, ['Context']));
+    view.appendChild(contextCard(pickups));
+
+    if (pickups.length < 6) {
+      view.appendChild(el('div', { class: 'banner warn', style: 'margin-top:12px' }, [
+        el('p', { style: 'margin:0' }, [
+          `${pickups.length} session${pickups.length === 1 ? '' : 's'} in. The trend line is mostly your RIR calibration for the first couple of months, not strength change — ` +
+          'expect it to be noisy before it is informative.'
+        ])
+      ]));
+    }
+  }
+
+  // Mean top-set E1RM by weekday. This is the payoff of running every session
+  // identically: with the days held constant, a systematic Friday deficit
+  // against Monday IS the answer to "is 3x/week too much for me". Reported
+  // with n and a standard error because on six weeks of data it will usually
+  // be too noisy to conclude anything, and saying so is the honest output.
+  function dayOfWeekCard(pickups, e1Of) {
+    const card = el('div', { class: 'card', style: 'margin-top:0' });
+    const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const buckets = {};
+    pickups.forEach(l => {
+      const d = new Date(l.date + 'T00:00:00');
+      if (!isFinite(d.getTime())) return;
+      const vals = [];
+      Calc.HANDS.forEach(h => {
+        const load = Calc.topLoad(l, h);
+        if (load == null) return;
+        const v = e1Of(load, Calc.topRPE(l, h), Calc.e1rmOf(l, h));
+        if (v != null) vals.push(v);
+      });
+      if (!vals.length) return;
+      const k = d.getDay();
+      (buckets[k] = buckets[k] || []).push(vals.reduce((s, v) => s + v, 0) / vals.length);
+    });
+    const keys = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+    if (!keys.length) {
+      card.appendChild(el('p', { class: 'muted', style: 'margin:0' }, ['No sessions yet.']));
+      return card;
+    }
+    const stats = keys.map(k => {
+      const a = buckets[k];
+      const mean = a.reduce((s, v) => s + v, 0) / a.length;
+      const varr = a.length > 1 ? a.reduce((s, v) => s + (v - mean) * (v - mean), 0) / (a.length - 1) : 0;
+      return { k, n: a.length, mean, se: a.length > 1 ? Math.sqrt(varr / a.length) : null };
+    });
+    const lo = Math.min.apply(null, stats.map(s => s.mean));
+    const hi = Math.max.apply(null, stats.map(s => s.mean));
+    const span = Math.max(0.5, hi - lo);
+    const bars = el('div', { class: 'vol-bars', style: 'align-items:flex-end' });
+    stats.forEach(s => {
+      bars.appendChild(el('div', {
+        class: 'vol-bar',
+        style: `height:${Math.max(6, Math.round(((s.mean - lo) / span) * 70) + 14)}px`,
+        role: 'img', 'aria-label': `${DAY_LABEL[s.k]} mean ${s.mean.toFixed(1)} kg from ${s.n} sessions`
+      }));
+    });
+    card.appendChild(bars);
+    card.appendChild(el('div', { class: 'axis-caps' }, stats.map(s => el('span', null, [DAY_LABEL[s.k]]))));
+    const rows = el('table', { class: 'prev' });
+    rows.appendChild(el('tr', { html: '<th>Day</th><th>Mean E1RM</th><th>n</th><th>± SE</th>' }));
+    stats.forEach(s => rows.appendChild(el('tr', {
+      html: `<td>${DAY_LABEL[s.k]}</td><td>${s.mean.toFixed(1)} kg</td><td>${s.n}</td><td>${s.se != null ? '±' + s.se.toFixed(2) : '—'}</td>`
+    })));
+    card.appendChild(rows);
+
+    const first = stats[0], last = stats[stats.length - 1];
+    let verdict;
+    if (stats.length < 2 || first.n < 3 || last.n < 3) {
+      verdict = 'Three sessions on each training day before this says anything.';
+    } else {
+      const diff = last.mean - first.mean;
+      const se = Math.sqrt((first.se || 0) * (first.se || 0) + (last.se || 0) * (last.se || 0));
+      const z = se > 0 ? Math.abs(diff) / se : 0;
+      verdict = z < 1.5
+        ? `${DAY_LABEL[last.k]} runs ${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(1)} kg against ${DAY_LABEL[first.k]}, which is inside the noise (${z.toFixed(1)}σ). No frequency verdict yet.`
+        : `${DAY_LABEL[last.k]} runs ${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(1)} kg against ${DAY_LABEL[first.k]} (${z.toFixed(1)}σ). ` +
+          (diff < 0 ? 'A consistent late-week deficit is what accumulated fatigue looks like — the lever is weekly set count, not session count.'
+                    : 'Late-week sessions are running higher, which is not a fatigue signature.');
+    }
+    card.appendChild(el('p', { class: 'card-title', style: 'margin:10px 0 0;font-size:13px' }, [verdict]));
+    card.appendChild(el('p', { class: 'card-note' }, [
+      'Mean of both hands per session, grouped by weekday. Only readable because every session in this block is prescribed identically — ' +
+      'varying the days by design would confound this with the prescription.'
+    ]));
+    return card;
+  }
+
+  // Where does the position start breaking? The degraded rate against load is
+  // the real working ceiling, and it is usually below the load you can "hold".
+  function positionCard(pickups) {
+    const card = el('div', { class: 'card', style: 'margin-top:0' });
+    let total = 0, degraded = 0, failed = 0;
+    const byLoad = [];
+    pickups.forEach(l => Calc.HANDS.forEach(h => {
+      const sets = Calc.setsDetailOf(l, h);
+      if (!sets) return;
+      sets.forEach(s => {
+        if (!s) return;
+        const reps = s.reps || (s.outcomes ? s.outcomes.length : 1) || 1;
+        total += reps;
+        if (s.outcome === 'degraded') degraded += reps;
+        if (s.outcome === 'failed') failed += reps;
+        if (s.load != null) byLoad.push({ load: s.load, bad: s.outcome && s.outcome !== 'clean' ? 1 : 0, hand: h });
+      });
+    }));
+    if (!total) {
+      card.appendChild(el('p', { class: 'muted', style: 'margin:0' }, ['No per-set position data yet.']));
+      return card;
+    }
+    const badPct = Math.round(((degraded + failed) / total) * 1000) / 10;
+    card.appendChild(el('div', { class: 'row' }, [
+      el('span', { class: 'card-title' }, ['Reps not clean']),
+      el('span', { class: 'tint-chip ' + (badPct <= 10 ? 'green' : 'amber') }, [badPct + '%'])
+    ]));
+    card.appendChild(el('p', { class: 'muted', style: 'margin:4px 0 0' }, [
+      `${degraded} degraded · ${failed} failed · ${total} reps logged`
+    ]));
+    // Ceiling estimate: the lightest load band where things start breaking.
+    const clean = byLoad.filter(p => !p.bad).map(p => p.load);
+    const broken = byLoad.filter(p => p.bad).map(p => p.load);
+    if (broken.length >= 3 && clean.length >= 3) {
+      const meanBroken = broken.reduce((s, v) => s + v, 0) / broken.length;
+      const maxClean = Math.max.apply(null, clean);
+      card.appendChild(el('p', { class: 'card-title', style: 'margin:10px 0 0;font-size:13px' }, [
+        `Position breaks around ${Calc.roundTo(meanBroken, 1)} kg on average; your heaviest fully clean set is ${maxClean} kg. ` +
+        'The lower of those is closer to your real working ceiling than the higher one.'
+      ]));
+    }
+    card.appendChild(el('p', { class: 'card-note' }, [
+      'A degraded top set is logged and charted, but it does not advance the load and the filter trusts it less (4× the variance) — ' +
+      'the load was real, it just was not expressed in position.'
+    ]));
+    return card;
+  }
+
+  // Readiness and climbing load, recorded before each top set. These are the
+  // fields that make a dip interpretable after the fact.
+  function contextCard(pickups) {
+    const card = el('div', { class: 'card', style: 'margin-top:0' });
+    const withR = pickups.filter(l => l.readiness != null);
+    const byClimb = { none: [], easy: [], hard: [] };
+    pickups.forEach(l => {
+      if (!l.climbing48h || !byClimb[l.climbing48h]) return;
+      const vals = Calc.HANDS.map(h => Calc.topLoad(l, h)).filter(v => v != null);
+      if (vals.length) byClimb[l.climbing48h].push(vals.reduce((s, v) => s + v, 0) / vals.length);
+    });
+    if (!withR.length && !Object.keys(byClimb).some(k => byClimb[k].length)) {
+      card.appendChild(el('p', { class: 'muted', style: 'margin:0' }, [
+        'No pre-session readiness or climbing load recorded yet. Without them a dip in the trend cannot be separated from a hard week on the wall.'
+      ]));
+      return card;
+    }
+    if (withR.length) {
+      const avg = withR.reduce((s, l) => s + l.readiness, 0) / withR.length;
+      card.appendChild(el('div', { class: 'row' }, [
+        el('span', { class: 'card-title' }, ['Readiness before session']),
+        el('span', { class: 'tint-chip ' + (avg >= 3.5 ? 'green' : 'amber') }, [avg.toFixed(1) + ' avg'])
+      ]));
+    }
+    const rows = [];
+    ['none', 'easy', 'hard'].forEach(k => {
+      const a = byClimb[k];
+      if (!a.length) return;
+      const m = a.reduce((s, v) => s + v, 0) / a.length;
+      rows.push(`<tr><td>${k}</td><td>${Calc.roundTo(m, 1)} kg</td><td>${a.length}</td></tr>`);
+    });
+    if (rows.length) {
+      const t = el('table', { class: 'prev' });
+      t.appendChild(el('tr', { html: '<th>Climbing 48h</th><th>Mean top set</th><th>n</th>' }));
+      t.innerHTML += rows.join('');
+      card.appendChild(t);
+    }
+    card.appendChild(el('p', { class: 'card-note' }, [
+      'Recorded before the top set, so it is not coloured by knowing how the session went.'
+    ]));
+    return card;
   }
 
   function isoWeekKey(iso) {
@@ -1446,7 +2007,7 @@
       el('h1', null, ['History']),
       el('button', { class: 'btn small secondary', onclick: () => App.openManualLog() }, ['+ Log'])
     ]));
-    const filters = ['All', 'Yielding', 'OI', 'Climbing', 'Heavy', 'Volume'];
+    const filters = ['All', 'Pickup', 'Yielding', 'OI', 'Climbing', 'Heavy', 'Volume'];
     const chips = el('div', { class: 'chips' });
     filters.forEach(f => chips.appendChild(chip(f, App.state.historyFilter === f, () => { App.state.historyFilter = f; App.render(); })));
     view.appendChild(chips);
@@ -1457,12 +2018,33 @@
     if (f !== 'All') logs = logs.filter(l => l.type === f || l.role === f);
     if (!logs.length) { view.appendChild(el('div', { class: 'card' }, ['No entries.'])); return; }
     logs.forEach(l => {
-      const item = el('button', { class: 'list-item', onclick: () => App.openManualLog(l) });
+      const pickup = Calc.isPickup(l);
+      const item = el('button', { class: 'list-item',
+        onclick: () => pickup ? App.openPickupLog(l) : App.openManualLog(l) });
       item.appendChild(el('div', { class: 'li-top' }, [
         el('span', { class: 'li-date' }, [fmtDate(l.date)]),
-        el('span', { class: 'muted' }, [`${l.role || l.type} · ${l.venue || ''}`])
+        el('span', { class: 'muted' }, [
+          pickup ? `Block pull · ${Calc.holdSecondsOf(l) || '?'}s${l.edgeMm ? ' · ' + l.edgeMm + 'mm' : ''}`
+                 : `${l.role || l.type} · ${l.venue || ''}`
+        ])
       ]));
       const bits = [];
+      if (pickup) {
+        Calc.HANDS.forEach(h => {
+          const load = Calc.topLoad(l, h);
+          if (load == null) return;
+          const rpe = Calc.topRPE(l, h);
+          // RIR is what was entered; RPE is only the storage form.
+          const rir = rpe != null ? Math.round((10 - rpe) * 10) / 10 : null;
+          bits.push(`${h} ${load}kg${rir != null ? ' · ' + rir + ' RIR' : ''}` +
+                    (Calc.topSetDegraded(l, h) ? ' ⚠' : ''));
+        });
+        const lL = Calc.topLoad(l, 'L'), lR = Calc.topLoad(l, 'R');
+        if (lL != null && lR != null) {
+          const hi = Math.max(lL, lR);
+          if (hi) bits.push('gap ' + (Math.round(((hi - Math.min(lL, lR)) / hi) * 1000) / 10) + '%');
+        }
+      }
       if (l.topSetLoadKg != null) bits.push(`${l.topSetLoadKg}kg @${l.topSetRPE || '?'}`);
       if (l.e1rmKg != null) bits.push(`E1RM ${l.e1rmKg}`);
       if (l.sets != null) bits.push(`${l.sets} sets`);
@@ -1738,6 +2320,9 @@
   // MANUAL LOG MODAL (also used for editing)
   // =====================================================================
   App.openManualLog = function (existing) {
+    // Pickup records have a different shape entirely — send them to their own
+    // editor rather than letting this form write nulls over the hands object.
+    if (Calc.isPickup(existing)) return App.openPickupLog(existing);
     const e = existing || {};
     const body = [];
     const state = {
@@ -1868,6 +2453,152 @@
     } }, ['Delete']));
 
     App.sheet(existing ? 'Edit session' : 'Log session', body);
+  };
+
+  // =====================================================================
+  // MANUAL PICKUP LOG (also used for editing)
+  // =====================================================================
+  // Separate sheet rather than a branch inside openManualLog: the two record
+  // shapes barely overlap (two hands, reps per set, per-set position outcome,
+  // no bodyweight, no working max) and interleaving them produced a form where
+  // most fields were hidden most of the time.
+  App.openPickupLog = function (existing) {
+    const e = existing || {};
+    const body = [];
+    const st = {
+      date: e.date || todayISO(),
+      holdSeconds: Calc.holdSecondsOf(e) || 3,
+      edgeMm: e.edgeMm != null ? e.edgeMm : 20,
+      grip: e.grip || 'HalfCrimp',
+      firstHand: e.firstHand === 'R' ? 'R' : 'L',
+      readiness: e.readiness != null ? e.readiness : null,
+      climbing48h: e.climbing48h || null,
+      taxing: e.taxing, felt: e.feltStrong, ndf: e.nextDayFeel,
+      notes: e.notes || ''
+    };
+
+    // Existing detail wins; a record with only a top set degrades to one row.
+    const rows = { L: [], R: [] };
+    Calc.HANDS.forEach(h => {
+      const d = Calc.setsDetailOf(e, h);
+      if (d && d.length) {
+        rows[h] = d.map(s => ({
+          load: s && s.load != null ? s.load : 0,
+          rpe: s && s.rpe != null ? s.rpe : 8.5,
+          reps: s && s.reps != null ? s.reps : null,
+          outcome: (s && OUTCOMES.indexOf(s.outcome) >= 0) ? s.outcome : 'clean'
+        }));
+        return;
+      }
+      const load = Calc.topLoad(e, h);
+      if (load != null) {
+        const r = Calc.topRPE(e, h);
+        rows[h] = [{ load, rpe: r != null ? r : 8.5, reps: null, outcome: 'clean' }];
+      }
+    });
+
+    const dInput = el('input', { type: 'date', value: st.date });
+    dInput.addEventListener('change', () => st.date = dInput.value);
+    body.push(el('div', { class: 'field' }, [el('label', null, ['Date']), dInput]));
+
+    const edgeSt = stepper({ min: 6, max: 40, step: 1, value: st.edgeMm, fmt: v => v + ' mm', onChange: v => st.edgeMm = v });
+    const holdSt = stepper({ min: 1, max: 15, step: 1, value: st.holdSeconds, fmt: v => v + ' s', onChange: v => st.holdSeconds = v });
+    body.push(el('div', { class: 'grid2' }, [
+      el('div', { class: 'field' }, [el('label', null, ['Edge']), edgeSt]),
+      el('div', { class: 'field' }, [el('label', null, ['Hold']), holdSt])
+    ]));
+    body.push(selectField('Grip', ['HalfCrimp', 'OpenHand', 'ThreeFingerDrag'], st.grip, v => st.grip = v));
+    body.push(selectField('First hand', ['L', 'R'], st.firstHand, v => st.firstHand = v));
+
+    const readyR = rating(5, st.readiness, v => st.readiness = v);
+    body.push(el('div', { class: 'field' }, [el('label', null, ['Readiness before the session (1–5)']), readyR]));
+    body.push(selectField('Climbing in last 48h', ['', 'none', 'easy', 'hard'], st.climbing48h || '',
+      v => st.climbing48h = v || null));
+
+    // ---- per-hand sets --------------------------------------------------
+    // Row 0 is the top set; the rest are back-offs. Outcome is per SET here
+    // (the runner records it per rep and collapses to the worst) — a manual
+    // entry after the fact can't honestly reconstruct individual reps.
+    Calc.HANDS.forEach(h => {
+      const list = el('div', null, []);
+      const field = el('div', { class: 'field' }, [
+        el('label', null, [h === 'L' ? 'Left hand · sets' : 'Right hand · sets']), list
+      ]);
+      function redraw() {
+        list.innerHTML = '';
+        rows[h].forEach((r, i) => {
+          const lSt = stepper({ min: 0, max: 120, step: 0.5, value: r.load, fmt: v => v + ' kg', onChange: v => r.load = v });
+          const rSt = stepper({ min: 0, max: 4, step: 0.5, value: Math.min(4, Math.max(0, 10 - r.rpe)),
+            fmt: v => v + ' RIR', onChange: v => r.rpe = 10 - v });
+          const oSel = el('select');
+          OUTCOMES.forEach(o => {
+            const op = el('option', { value: o }, [o]); if (o === r.outcome) op.selected = true; oSel.appendChild(op);
+          });
+          oSel.addEventListener('change', () => r.outcome = oSel.value);
+          list.appendChild(el('div', { class: 'row', style: 'margin:8px 0 4px' }, [
+            el('span', { class: 'muted' }, [i === 0 ? 'Top set' : 'Back-off ' + i]),
+            el('button', { class: 'btn secondary', style: 'padding:2px 12px;min-height:0',
+              onclick: () => { rows[h].splice(i, 1); redraw(); } }, ['×'])
+          ]));
+          list.appendChild(el('div', { class: 'grid2' }, [lSt, rSt]));
+          list.appendChild(oSel);
+        });
+        list.appendChild(el('button', { class: 'btn secondary', style: 'margin-top:6px', onclick: () => {
+          if (rows[h].length >= 9) return;
+          const prev = rows[h][rows[h].length - 1];
+          const top = rows[h][0];
+          rows[h].push(prev && top
+            ? { load: Calc.roundTo05(top.load * 0.88), rpe: prev.rpe, reps: prev.reps, outcome: 'clean' }
+            : { load: 0, rpe: 8.5, reps: null, outcome: 'clean' });
+          redraw();
+        } }, [rows[h].length ? '+ Add set' : '+ Add top set']));
+      }
+      redraw();
+      body.push(field);
+    });
+
+    const taxR = rating(5, st.taxing, v => st.taxing = v);
+    const feltR = rating(10, st.felt, v => st.felt = v);
+    const ndfR = rating(5, st.ndf, v => st.ndf = v);
+    body.push(el('div', { class: 'field' }, [el('label', null, ['Session taxing (1–5)']), taxR]));
+    body.push(el('div', { class: 'field' }, [el('label', null, ['Felt strong (1–10)']), feltR]));
+    body.push(el('div', { class: 'field' }, [el('label', null, ['Next-day feel (1–5, fill tomorrow)']), ndfR]));
+
+    const notes = el('textarea', { placeholder: 'Notes' }); notes.value = st.notes;
+    notes.addEventListener('input', () => st.notes = notes.value);
+    body.push(el('div', { class: 'field' }, [el('label', null, ['Notes']), notes]));
+
+    body.push(el('button', { class: 'btn', onclick: async () => {
+      const hands = {};
+      Calc.HANDS.forEach(h => {
+        if (!rows[h].length) { hands[h] = null; return; }
+        hands[h] = {
+          topSetLoadKg: rows[h][0].load,
+          topSetRPE: rows[h][0].rpe,
+          setsDetail: rows[h].map(r => ({ load: r.load, rpe: r.rpe, reps: r.reps, outcome: r.outcome, outcomes: [] }))
+        };
+      });
+      if (!hands.L && !hands.R) { App.confirm('Add at least one set for one hand.', 'OK', () => {}); return; }
+      const entry = App.buildPickupEntry(null, {
+        date: st.date, holdSeconds: st.holdSeconds, grip: st.grip, edgeMm: st.edgeMm,
+        hands, firstHand: st.firstHand, readiness: st.readiness, climbing48h: st.climbing48h,
+        sets: rows.L.length + rows.R.length,
+        taxing: taxR.getValue(), felt: feltR.getValue(), nextDayFeel: ndfR.getValue(),
+        notes: st.notes
+      }, e);
+      entry.block = e.block || (await blockNameFor(st.date)) || '';
+      await DB.addLog(entry);
+      App.closeSheet(); App.render();
+      if (window.Sync && Sync.auto) Sync.auto({ force: true });
+    } }, [existing ? 'Save changes' : 'Save session']));
+
+    if (existing) body.push(el('button', { class: 'btn danger', style: 'margin-top:8px', onclick: () => {
+      App.confirm('Delete this entry?', 'Delete', async () => {
+        await DB.softDelete('logEntries', e.id); App.closeSheet(); App.render();
+      });
+    } }, ['Delete']));
+
+    App.sheet(existing ? 'Edit block pull' : 'Log block pull', body);
   };
 
   function selectField(label, opts, value, onChange) {
@@ -2107,7 +2838,75 @@
   };
 
   // ---- session-end logging (called by Runner) --------------------------
+  // Sanitizer shared by the runner and the manual pickup editor.
+  const OUTCOMES = ['clean', 'degraded', 'failed'];
+  function sanitizePickupSets(arr) {
+    if (!Array.isArray(arr)) return null;
+    return arr.map(s => ({
+      load: (s && s.load != null && isFinite(+s.load)) ? +s.load : null,
+      rpe: (s && s.rpe != null && isFinite(+s.rpe)) ? +s.rpe : null,
+      reps: (s && s.reps != null && isFinite(+s.reps)) ? +s.reps : null,
+      outcome: (s && OUTCOMES.indexOf(s.outcome) >= 0) ? s.outcome : null,
+      outcomes: Array.isArray(s && s.outcomes) ? s.outcomes.filter(o => OUTCOMES.indexOf(o) >= 0) : []
+    }));
+  }
+  function pickupSide(src) {
+    if (!src || src.topSetLoadKg == null || !isFinite(+src.topSetLoadKg)) return null;
+    return {
+      topSetLoadKg: +src.topSetLoadKg,
+      topSetRPE: (src.topSetRPE != null && isFinite(+src.topSetRPE)) ? +src.topSetRPE : null,
+      setsDetail: sanitizePickupSets(src.setsDetail),
+      e1rmKg: null           // DB.addLog computes it per hand
+    };
+  }
+
+  App.buildPickupEntry = function (plan, result, existing) {
+    const e = existing || {};
+    return {
+      id: e.id || Templates.uid(),
+      date: result.date || todayISO(),
+      modality: 'pickup',
+      // type stays 'Yielding' — it IS yielding isometric work, and `modality`
+      // is the single discriminator. The FLAT load/RPE/E1RM fields stay null,
+      // which is what keeps this record out of every hang query (analytics
+      // series, deloadTrend, auto-PR benchmarks, weekly volume) with no
+      // changes at those call sites. See the accessor block in calc.js.
+      type: 'Yielding', role: 'Pickup', venue: e.venue || 'Home',
+      hangDurationSeconds: null,
+      holdSeconds: result.holdSeconds != null ? result.holdSeconds : ((plan && plan.duration) || 3),
+      grip: result.grip || (plan && plan.grip) || 'HalfCrimp',
+      edgeMm: result.edgeMm != null ? result.edgeMm : ((plan && plan.edgeMm) || null),
+      hands: { L: pickupSide(result.hands && result.hands.L),
+               R: pickupSide(result.hands && result.hands.R) },
+      firstHand: result.firstHand === 'R' ? 'R' : 'L',
+      readiness: result.readiness != null ? result.readiness : null,
+      climbing48h: result.climbing48h || null,
+      topSetLoadKg: null, topSetRPE: null, e1rmKg: null, setsDetail: null,
+      sets: result.sets != null ? result.sets : null,
+      bodyweightKg: null,
+      taxing: result.taxing != null ? result.taxing : null,
+      feltStrong: result.felt != null ? result.felt : (e.feltStrong != null ? e.feltStrong : null),
+      nextDayFeel: result.nextDayFeel != null ? result.nextDayFeel : (e.nextDayFeel != null ? e.nextDayFeel : null),
+      block: (plan && plan.blockName) || e.block || '',
+      notes: result.notes || ''
+    };
+  };
+
+  async function logPickupSession(plan, result) {
+    const entry = App.buildPickupEntry(plan, result);
+    entry.block = entry.block || (await blockNameFor(entry.date)) || '';
+    await DB.addLog(entry);
+    await DB.setMeta('pendingNextDayFeel', { logEntryId: entry.id, sessionDate: entry.date });
+    // No benchmark/WM path: pickups opt out of the Working Max system
+    // entirely (see annotateWeekAnchors) — there is no anchor for a test to
+    // refresh, and the WM store keys on durationSeconds alone, so a 3s pickup
+    // max would collide with the 3s hang max already on file.
+    App.go('today');
+    if (window.Sync && Sync.auto) Sync.auto({ force: true });
+  }
+
   App.logSession = async function (plan, result) {
+    if (result && result.modality === 'pickup') return logPickupSession(plan, result);
     const bw = (await DB.getMeta('bodyweightKg')) || null;
     const entry = {
       // result.date: the runner carries the day the session was STARTED, so a

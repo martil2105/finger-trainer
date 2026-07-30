@@ -86,6 +86,74 @@
     };
   }
 
+  // ---- Template P: "Block Pull · Data Block (3s)" ------------------------
+  // One-handed edge pickups. 20mm half crimp, 3s holds, 3x/week, and EVERY
+  // SESSION IS IDENTICAL — that is the design, not laziness. With the days
+  // held constant, day-of-week becomes a controlled variable: a systematic
+  // Friday deficit against Monday is then a readable answer to "is 3x/week
+  // too much for me". Prescribing the three days differently would destroy
+  // exactly the signal this block exists to collect.
+  //
+  // Frequency rationale: with weekly volume equated, training frequency has
+  // little independent effect on strength. 3x/week is not more work — it is
+  // the same weekly work spread thinner, so every set happens fresher. The
+  // failure mode is running a 2x/week set count three times a week, so the
+  // budget is WEEKLY (10-12 working sets per hand) and the per-session count
+  // follows from it.
+  //
+  // Session: ramp 55/75/88% of last session's top set (one rep each, per
+  // hand) -> top set 3 reps x 3s at RIR 1-2 -> 3 back-off sets at 88% of
+  // TODAY's top set. Hands alternate throughout, so each hand gets ~3 min
+  // recovery while the whole session costs ~25 min of wall clock.
+  //
+  // Why 3 reps per set rather than one longer hold: shortening the hold
+  // without adding reps quietly halves the dose. Held at 3s, volume has to
+  // come back as reps — 4 sets x 3 reps is ~36s of near-max force per hand,
+  // which is where the tendon-adaptation work sits, at a higher percentage
+  // than an 8s hold could support.
+  //
+  // No scheduled deload. A deload is a prescribed variation and we would only
+  // be guessing at the week; the top-set trend says when one was needed,
+  // which beats a calendar.
+  function pickupBlock(name, weeks) {
+    return {
+      id: uid(), name, type: 'Pickup', durationWeeks: weeks, isDeloadTest: false,
+      modality: 'pickup',
+      heavy: {
+        hangDurationSeconds: 3,          // hold seconds (one accessor reads both names)
+        protocol: 'topSetPlusBackoffs',
+        rpeStart: 8.5, rpeEnd: 8.5,      // RIR 1-2. Flat: this block never ramps intensity
+        setsStart: 3, setsEnd: 3,        // back-off SETS (the top set is separate)
+        backoffPctOfTop: 0.88, backoffPctOfTopEnd: 0.88,
+        repsPerSet: 3,                   // 3 reps of 3s inside every set, ~20s between reps
+        rampPcts: [0.55, 0.75, 0.88],    // of LAST session's top set, one rep each
+        edgeMm: 20, grip: 'HalfCrimp'
+      },
+      volume: null, oi: { sets: 0 }, testConfig: null
+    };
+  }
+
+  function templateP() {
+    return {
+      id: uid(),
+      name: 'Block Pull · Data Block (3s)',
+      status: 'active',
+      modality: 'pickup',
+      startDate: mondayOfThisWeek(),
+      weeklyStructure: { mon: 'Pickup', tue: 'Rest', wed: 'Pickup', thu: 'Rest',
+                         fri: 'Pickup', sat: 'Rest', sun: 'Rest' },
+      notes: '20mm half crimp · 3s holds · one hand at a time · hands alternate. ' +
+             'EVERY SESSION IDENTICAL for six weeks — the uniformity is what makes day-of-week a readable variable. ' +
+             'Ramp 55/75/88% of last session\'s top set, one rep each. Top set 3 reps at RIR 1-2. Back-offs 3 sets of 3 reps at 88% of TODAY\'S top. ' +
+             'Ramp to the weight over ~2s — a snatchy pickup spikes peak load unpredictably, which is both the injury mechanism and a corrupted log entry. ' +
+             'Percentages run off EACH HAND\'S OWN last top set: training the weak hand at the strong hand\'s load is how an asymmetry becomes an injury. ' +
+             'Position gate overrides everything — a rep where the fingers rolled open or the wrist collapsed is logged degraded and does not count toward progression, whatever the RIR says. ' +
+             'RIR is judged against TECHNICAL failure (first rep where position breaks), not against physical failure, so the reference is something you can safely have visited. ' +
+             'Expect the first ~2 months of the trend line to be your RIR calibration rather than strength change. Only hard interrupt: pain stops the session.',
+      blocks: [ pickupBlock('Data Block · 6 wk', 6) ]
+    };
+  }
+
   // ---- Template C: blank — one Custom block at defaults (§12C) ----------
   function templateC() {
     return {
@@ -161,6 +229,7 @@
     };
   }
 
-  root.Templates = { uid, templateA, templateB, templateC, templateD, block, deload, SEED_LOG };
+  root.Templates = { uid, templateA, templateB, templateC, templateD, templateP,
+                     block, deload, pickupBlock, SEED_LOG };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Templates;
 })(typeof self !== 'undefined' ? self : this);
