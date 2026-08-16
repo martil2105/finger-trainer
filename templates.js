@@ -12,6 +12,7 @@
       name: 'Trans I–II + Peak (5s→3s)',
       status: 'active',
       startDate: '2026-05-11',
+      edgeMm: 20,          // stated explicitly; historical blocks were all 20mm
       weeklyStructure: { mon: 'Rest', tue: 'OIprimer', wed: 'Rest', thu: 'Volume', fri: 'Rest', sat: 'Heavy', sun: 'Rest' },
       notes: 'Skips accumulation — straight into Transmutation given established base.',
       blocks: [
@@ -75,6 +76,10 @@
       name: '4-Week Top-Set Block (3s)',
       status: 'active',
       startDate: mondayOfThisWeek(),
+      // Edge is a cycle-level setting (Program → Edit cycle). Working Maxes,
+      // benchmarks and every trend are keyed per edge, so changing this starts
+      // a clean series rather than contaminating the old one.
+      edgeMm: 20,
       weeklyStructure: { mon: 'Rest', tue: 'OIprimer', wed: 'Rest', thu: 'Heavy', fri: 'Rest', sat: 'Heavy', sun: 'Rest' },
       notes: 'Maximal-neural finger block. 67kg BW · 20mm half-crimp · 3s hangs · ref fresh 3s max 32.5kg. ' +
              'RPE is the ONLY fixed variable — load is never prescribed, let it find itself. Top-set RPE ceiling: 9 (Wk1-2) → 9.5 (Wk3-4). ' +

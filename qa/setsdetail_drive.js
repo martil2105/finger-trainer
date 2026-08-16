@@ -134,17 +134,25 @@ const tick = (ms) => new Promise(r => setTimeout(r, ms));
   {
     await tick(300);
     w.App.openManualLog();
-    await tick(60);
+    await tick(80);   // openManualLog is async (looks up the default edge)
     const sh = [...w.document.querySelectorAll('#modal-host .sheet')].pop();
-    const sts = () => [...sh.querySelectorAll('.stepper')];
-    sts()[0].setValue(30); sts()[1].setValue(9);                 // top set 30 @9
+    // Locate steppers by their field LABEL, not by document order: the editor
+    // gained an "Edge depth" stepper on 2026-08-16 and index-based selection
+    // silently retargeted every assertion below when it did.
+    const field = (re) => [...sh.querySelectorAll('.field')]
+      .find(f => { const l = f.querySelector('label'); return l && re.test(l.textContent); });
+    const stepIn = (re) => field(re).querySelector('.stepper');
+    const boSteppers = () => [...field(/Back-off sets/).querySelectorAll('.stepper')];
+    stepIn(/Top set load/).setValue(30); stepIn(/Top set RPE/).setValue(9);   // top set 30 @9
+    ok(!!stepIn(/Edge depth/), 'edge stepper present in hang editor');
     const addBtn = () => [...sh.querySelectorAll('button')].find(b => /Add back-off set/.test(b.textContent));
     ok(!!addBtn(), 'add-back-off button present');
     addBtn().click(); await tick(30);
     addBtn().click(); await tick(30);
-    // steppers: 0 load, 1 rpe, 2 sets(hidden), 3/4 row1, 5/6 row2
-    sts()[3].setValue(25.5); sts()[4].setValue(8);
-    sts()[5].setValue(25); sts()[6].setValue(7.5);
+    // back-off rows are load,rpe pairs in order inside the Back-off sets field
+    const bo = boSteppers();
+    bo[0].setValue(25.5); bo[1].setValue(8);
+    bo[2].setValue(25); bo[3].setValue(7.5);
     const saveNew = [...sh.querySelectorAll('button')].find(b => /Save session/.test(b.textContent));
     saveNew.click();
     await tick(120);

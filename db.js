@@ -136,10 +136,21 @@
   }
 
   // ---- domain helpers ---------------------------------------------------
-  // Current WM for a duration = latest-dated entry for that duration.
-  function currentWM(durationSeconds) {
+  // Edge size, read-time defaulted to 20mm exactly like Calc.edgeMmOf. Kept as
+  // a local copy so the key functions below never depend on load order.
+  const DEFAULT_EDGE_MM = 20;
+  function edgeOf(rec) {
+    const v = rec ? +rec.edgeMm : NaN;
+    return (isFinite(v) && v > 0) ? v : DEFAULT_EDGE_MM;
+  }
+
+  // Current WM for a duration ON A GIVEN EDGE = latest-dated matching entry.
+  // The edge argument defaults to 20mm, which is what every pre-2026-08-16
+  // Working Max and every caller written before edges existed means.
+  function currentWM(durationSeconds, edgeMm) {
+    const edge = (edgeMm != null && isFinite(+edgeMm) && +edgeMm > 0) ? +edgeMm : DEFAULT_EDGE_MM;
     return getAll('workingMaxes').then(all => {
-      const f = all.filter(w => w.durationSeconds === durationSeconds);
+      const f = all.filter(w => w.durationSeconds === durationSeconds && edgeOf(w) === edge);
       if (!f.length) return null;
       f.sort((a, b) => (a.date < b.date ? 1 : -1));
       return f[0];
@@ -148,6 +159,36 @@
   function wmDurationsOnFile() {
     return getAll('workingMaxes').then(all =>
       Array.from(new Set(all.map(w => w.durationSeconds))));
+  }
+  // Every (duration, edge) pair with a Working Max on file — what guardrails
+  // needs now that a 3s max at 20mm says nothing about a 3s max at 15mm.
+  function wmKeysOnFile() {
+    return getAll('workingMaxes').then(all => {
+      const seen = {};
+      all.forEach(w => {
+        if (!w || w.durationSeconds == null) return;
+        seen[w.durationSeconds + '|' + edgeOf(w)] = { durationSeconds: w.durationSeconds, edgeMm: edgeOf(w) };
+      });
+      return Object.keys(seen).map(k => seen[k]);
+    });
+  }
+  // One pass over the WM store -> wmFor(duration, edge) for the anchor code.
+  // Built from the whole store rather than a fixed 5/3/7 fetch so a new edge
+  // (or a new duration) needs no change here.
+  function wmLookup() {
+    return getAll('workingMaxes').then(all => {
+      const best = {};
+      all.forEach(w => {
+        if (!w || w.durationSeconds == null || w.valueKg == null) return;
+        const k = w.durationSeconds + '|' + edgeOf(w);
+        if (!best[k] || String(best[k].date) < String(w.date)) best[k] = w;
+      });
+      return function (durationSeconds, edgeMm) {
+        const edge = (edgeMm != null && isFinite(+edgeMm) && +edgeMm > 0) ? +edgeMm : DEFAULT_EDGE_MM;
+        const r = best[durationSeconds + '|' + edge];
+        return r ? r.valueKg : null;
+      };
+    });
   }
   function activeCycle() {
     return getAll('cycles').then(all => {
@@ -247,19 +288,25 @@
       const s = e.hands && e.hands[h];
       return s ? [h, s.topSetLoadKg, s.topSetRPE, (s.setsDetail || []).length].join(':') : '';
     }).join(',');
+    // Edge is in the signature for the same reason modality is: two sessions on
+    // the same day at the same load and RPE but on different edges are
+    // different sessions, and without the edge term dedupe() would delete one
+    // of them on every device at once. Legacy rows all resolve to 20 via
+    // edgeOf(), so existing keys stay identical across devices and still
+    // converge — only genuinely-different edges split apart.
     return ['log', e.date, (e.modality || 'hang'), e.type, e.role, e.venue,
             e.topSetLoadKg, e.topSetRPE, e.sets, e.hangDurationSeconds,
-            e.holdSeconds, hands, e.notes].join('|');
+            e.holdSeconds, edgeOf(e), hands, e.notes].join('|');
   }
   function wmKey(w) {
-    return ['wm', w.date, w.durationSeconds, w.valueKg].join('|');
+    return ['wm', w.date, w.durationSeconds, edgeOf(w), w.valueKg].join('|');
   }
   function cycleKey(c) {
     return ['cycle', c.name, c.startDate].join('|');
   }
   function benchKey(b) {
     // re-saving/editing a Test logs a fresh benchmark; collapse identical ones
-    return ['bench', b.date, b.durationSeconds, b.maxLoadKg, b.rpe].join('|');
+    return ['bench', b.date, b.durationSeconds, edgeOf(b), b.maxLoadKg, b.rpe].join('|');
   }
   // Dedupe preference when two copies of a cycle collide: an active copy must
   // beat a stood-down one, so collapsing duplicates can never leave Today with
@@ -386,7 +433,7 @@
 
   root.DB = {
     open, put, save, putAll, del, getAll, get, clear, getMeta, setMeta,
-    currentWM, wmDurationsOnFile, activeCycle, logsNewestFirst, addLog,
+    currentWM, wmDurationsOnFile, wmKeysOnFile, wmLookup, activeCycle, logsNewestFirst, addLog,
     seedIfEmpty, resetAll, exportBackup, importBackup,
     dedupe, dedupeDatabase, softDelete, applyTombstones, gcTombstones
   };

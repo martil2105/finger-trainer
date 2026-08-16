@@ -139,6 +139,18 @@
     dateI.addEventListener('change', () => { cycle.startDate = dateI.value; refresh(); });
     body.push(el('div', { class: 'field' }, [el('label', null, ['Start date']), dateI]));
 
+    // Edge depth for the whole cycle. Blocks that name their own edge (the
+    // pickup block does) keep it; everything else inherits this. Changing it
+    // re-anchors every week to that edge's Working Max in the preview below,
+    // which is the point — the anchors are only meaningful per edge.
+    const edgeI = el('input', { type: 'number', min: '6', max: '40', step: '1', value: String(Calc.cycleEdgeMm(cycle)) });
+    edgeI.addEventListener('change', () => {
+      const v = +edgeI.value;
+      cycle.edgeMm = (isFinite(v) && v > 0) ? v : Calc.DEFAULT_EDGE_MM;
+      refresh();
+    });
+    body.push(el('div', { class: 'field' }, [el('label', null, ['Edge depth (mm)']), edgeI]));
+
     // weekly structure editor
     body.push(el('label', { class: '', style: 'font-size:13px;color:var(--text-dim)' }, ['Weekly structure']));
     const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -197,9 +209,10 @@
         blockList.appendChild(card);
       });
 
-      // guardrails
-      const wmDurs = await DB.wmDurationsOnFile();
-      const warns = Calc.guardrails(cycle, wmDurs);
+      // guardrails — (duration, edge) pairs, so a 3s max at 20mm no longer
+      // counts as cover for a 15mm block.
+      const wmKeys = await DB.wmKeysOnFile();
+      const warns = Calc.guardrails(cycle, wmKeys);
       guardPanel.innerHTML = '';
       if (warns.length) {
         guardPanel.appendChild(el('details', { class: 'card', open: 'true' }, [
@@ -230,10 +243,9 @@
     refresh();
   };
 
+  // wmFor(durationSeconds, edgeMm) — Working Maxes are keyed on the edge too.
   async function wmForFn() {
-    const [w5, w3, w7] = await Promise.all([DB.currentWM(5), DB.currentWM(3), DB.currentWM(7)]);
-    const map = { 5: w5 && w5.valueKg, 3: w3 && w3.valueKg, 7: w7 && w7.valueKg };
-    return (d) => (map[d] != null ? map[d] : null);
+    return DB.wmLookup();
   }
 
   // ---- 10.3 block editor ------------------------------------------------

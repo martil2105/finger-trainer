@@ -248,7 +248,10 @@
 
       // Readiness check applies to load-based hang sessions (not OI primer).
       const loadBased = plan.protocol && plan.protocol !== 'oi';
-      const wm5 = await DB.currentWM(5);
+      // Warm-up reference must come from THIS edge's 5s max: on a 15mm session
+      // a 20mm-derived warm-up is several kg too heavy, which is exactly the
+      // load the readiness check then misreads as "you're weak today".
+      const wm5 = await DB.currentWM(5, plan.edgeMm != null ? plan.edgeMm : undefined);
       const warmupRef = (wm5 && wm5.valueKg != null) ? wm5.valueKg
         : (plan.anchor != null ? plan.anchor : null);
       const warmupKg = warmupRef != null ? Calc.roundTo05(warmupRef * 0.7) : null;
@@ -456,6 +459,10 @@
     const p = R.plan;
     const lines = [];
     if (p.duration) lines.push(`${p.duration}s hang`);
+    // The edge is on screen for the same reason the hand is on every pickup
+    // screen: it decides which series this session lands in, and it can't be
+    // recovered afterwards from the numbers alone.
+    if (p.edgeMm) lines.push(`${p.edgeMm}mm`);
     if (p.rpe) lines.push(`@${p.rpe}`);
     if (p.anchor != null) lines.push(`anchor ~${p.anchor} kg`);
     lines.push(effortLabel());
@@ -891,6 +898,9 @@
           }
         : {
             load: top.load != null ? top.load : null, rpe: top.rpe != null ? top.rpe : null,
+            // Edge comes off the plan, which the Today card already resolved
+            // (including a same-day override) before the runner started.
+            edgeMm: R.plan.edgeMm != null ? R.plan.edgeMm : null,
             sets: setsCount, taxing: tax.getValue(), felt: felt.getValue(), notes: notes.value,
             // Full per-effort capture (top set first, then back-offs in order) —
             // until 2026-07-10 this was collected by the steppers and discarded here.

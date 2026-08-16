@@ -76,6 +76,40 @@
     if (e.holdSeconds != null) return e.holdSeconds;
     return e.hangDurationSeconds != null ? e.hangDurationSeconds : null;
   }
+
+  // ---- edge size (2026-08-16) -------------------------------------------
+  // Edge depth is a second axis of the same exercise, exactly like hold
+  // duration: a 15mm top set and a 20mm top set are both real numbers and
+  // neither is convertible into the other without personal data. Mixing them
+  // in one series makes a smaller edge look like lost strength, so edge is a
+  // FIRST-CLASS key everywhere duration already is — Working Maxes, benchmark
+  // PRs, dedupe signatures, and every analytics series.
+  //
+  // Read-time default, never migrated (same reasoning as modalityOf): every
+  // record written before 2026-08-16 was 20mm — the only edge Martin trained
+  // and the one named in the template notes — and restamping updatedAt on the
+  // whole log to write that in would trigger a full re-upload and merge storm
+  // through Gist sync. A missing edgeMm therefore MEANS 20mm; it is not
+  // "unknown", so no call site has to carry a null case.
+  const DEFAULT_EDGE_MM = 20;
+  function edgeMmOf(e) {
+    if (!e) return DEFAULT_EDGE_MM;
+    const v = +e.edgeMm;
+    return (isFinite(v) && v > 0) ? v : DEFAULT_EDGE_MM;
+  }
+  // Edge a cycle prescribes. Cycles predating the field are 20mm blocks.
+  function cycleEdgeMm(cycle) {
+    if (!cycle) return DEFAULT_EDGE_MM;
+    const v = +cycle.edgeMm;
+    return (isFinite(v) && v > 0) ? v : DEFAULT_EDGE_MM;
+  }
+  // Composite key for anything that must not pool across edges or durations.
+  function strengthKey(durationSeconds, edgeMm) {
+    const d = (durationSeconds == null || !isFinite(+durationSeconds)) ? '?' : +durationSeconds;
+    const e = (edgeMm == null || !isFinite(+edgeMm) || +edgeMm <= 0) ? DEFAULT_EDGE_MM : +edgeMm;
+    return d + 's@' + e + 'mm';
+  }
+  function edgeLabel(mm) { return (mm == null ? DEFAULT_EDGE_MM : mm) + 'mm'; }
   // A top set whose position broke is a contaminated observation: the load is
   // real but it doesn't mean what a clean rep means. Used to inflate that
   // session's observation noise in the filter (see kalman_data.js).
@@ -151,7 +185,12 @@
 
   // ---- 6.3 Block -> week expansion -------------------------------------
   // Returns array of per-week prescriptions for a single block.
-  function expandBlock(block, weekOffset, startDateISO) {
+  // cycleEdge: the cycle's edge, used for any block that doesn't name its own.
+  // Passed down rather than read off the block so a whole cycle can be moved to
+  // a different edge in one place (and so deload/test weeks, which have no
+  // `heavy` prescription at all, still land on the right edge — a test on the
+  // wrong edge would write its benchmark into the wrong Working Max).
+  function expandBlock(block, weekOffset, startDateISO, cycleEdge) {
     // Defensive (fuzz-hardened 2026-07-06): a block missing `heavy` or with a
     // junk durationWeeks used to throw and kill Today/Program/Analytics AND
     // silently break manual-log saves (via blockNameFor). Corrupt weeks are
@@ -169,6 +208,10 @@
         isDeloadTest: !!block.isDeloadTest,
         startDate: addDays(startDateISO, (weekOffset + i) * 7)
       };
+      // Edge applies to every week shape, loading and test alike.
+      wk.edgeMm = (hv.edgeMm != null && isFinite(+hv.edgeMm) && +hv.edgeMm > 0)
+        ? +hv.edgeMm
+        : ((cycleEdge != null && isFinite(+cycleEdge) && +cycleEdge > 0) ? +cycleEdge : DEFAULT_EDGE_MM);
       if (block.isDeloadTest) {
         wk.heavyProtocol = 'deloadTest';
         wk.heavyDuration = (block.testConfig && block.testConfig.testDurations &&
@@ -200,7 +243,6 @@
         wk.modality = block.modality || 'hang';
         wk.repsPerSet = hv.repsPerSet != null ? hv.repsPerSet : 1;
         wk.rampPcts = Array.isArray(hv.rampPcts) ? hv.rampPcts.slice() : null;
-        wk.edgeMm = hv.edgeMm != null ? hv.edgeMm : null;
         wk.grip = hv.grip || null;
       }
       weeks.push(wk);
@@ -216,8 +258,9 @@
     if (!cycle || !validISO(cycle.startDate)) return [];
     const out = [];
     let offset = 0;
+    const cycEdge = cycleEdgeMm(cycle);
     (cycle.blocks || []).forEach(b => {
-      const weeks = expandBlock(b, offset, cycle.startDate);
+      const weeks = expandBlock(b, offset, cycle.startDate, cycEdge);
       weeks.forEach(w => out.push(w));
       offset += b.durationWeeks;
     });
@@ -251,11 +294,14 @@
   }
 
   // Attach live load anchors to a generated week given the current WMs.
-  // wmFor(durationSeconds) -> kg or null.
+  // wmFor(durationSeconds, edgeMm) -> kg or null. The edge argument is not
+  // optional in spirit: a 15mm week anchored to the 20mm Working Max would
+  // prescribe a load several kg too heavy and read as a failed session.
   function annotateWeekAnchors(week, wmFor) {
     const w = Object.assign({}, week);
+    const edge = w.edgeMm != null ? w.edgeMm : DEFAULT_EDGE_MM;
     if (w.heavyProtocol === 'deloadTest') {
-      w.deloadAnchorKg = deloadAnchor(wmFor(5));
+      w.deloadAnchorKg = deloadAnchor(wmFor(5, edge));
       w.heavyAnchorKg = w.deloadAnchorKg;
       return w;
     }
@@ -273,7 +319,7 @@
       w.wmMissing = false;
       return w;
     }
-    const wm = wmFor(w.heavyDuration);
+    const wm = wmFor(w.heavyDuration, edge);
     w.heavyAnchorKg = heavyAnchor(wm, w.heavyRPE);
     w.backoffAnchorKg = backoffAnchor(w.heavyAnchorKg, w.backoffPctOfTop);
     if (w.volumePct != null) {
@@ -340,23 +386,45 @@
 
   // ---- 11. Periodization guardrails ------------------------------------
   // Returns array of { id, message } for whichever rules fire.
-  function guardrails(cycle, wmDurations) {
+  // wmOnFile: either the legacy array of durations ([5, 3]) or the edge-aware
+  // shape ([{durationSeconds, edgeMm}, ...]). Both are accepted so a caller
+  // that hasn't been updated keeps its old duration-only matching instead of
+  // silently reporting every block as missing a Working Max.
+  function guardrails(cycle, wmOnFile) {
     const warns = [];
     const blocks = cycle.blocks || [];
-    wmDurations = wmDurations || []; // durations with a WM on file
+    const haveKeys = new Set(), haveDurs = new Set();
+    let edgeAware = false;
+    (wmOnFile || []).forEach(k => {
+      if (k == null) return;
+      if (typeof k === 'object') {
+        edgeAware = true;
+        haveKeys.add(strengthKey(k.durationSeconds, k.edgeMm));
+        haveDurs.add(+k.durationSeconds);
+      } else {
+        haveDurs.add(+k);
+      }
+    });
 
-    // 1. Missing WM for any heavy duration used.
-    const needed = new Set();
+    // 1. Missing WM for any heavy duration + edge used.
+    const cycEdge = cycleEdgeMm(cycle);
+    const needed = new Map();                 // strengthKey -> { d, edge }
     const allPickup = blocks.length > 0 && blocks.every(b => b && b.modality === 'pickup');
     blocks.forEach(b => {
       if (b.isDeloadTest) return;
       if (b.modality === 'pickup') return;   // opts out of the WM system (see annotateWeekAnchors)
-      if (b.heavy && b.heavy.hangDurationSeconds) needed.add(b.heavy.hangDurationSeconds);
+      if (b.heavy && b.heavy.hangDurationSeconds) {
+        const d = b.heavy.hangDurationSeconds;
+        const edge = (b.heavy.edgeMm != null && isFinite(+b.heavy.edgeMm) && +b.heavy.edgeMm > 0)
+          ? +b.heavy.edgeMm : cycEdge;
+        needed.set(strengthKey(d, edge), { d: d, edge: edge });
+      }
     });
-    needed.forEach(d => {
-      if (!wmDurations.includes(d)) {
+    needed.forEach((v, key) => {
+      const have = edgeAware ? haveKeys.has(key) : haveDurs.has(+v.d);
+      if (!have) {
         warns.push({ id: 'missingWM', message:
-          `No ${d}s Working Max on file. Set a ${d}s benchmark before this block starts so load anchors are correct.` });
+          `No ${v.d}s Working Max on file at ${edgeLabel(v.edge)}. Set a ${v.d}s benchmark on the ${edgeLabel(v.edge)} edge before this block starts so load anchors are correct.` });
       }
     });
 
@@ -451,6 +519,7 @@
     roundTo, roundTo05, roundTo025, lerp, avg,
     HANDS, modalityOf, isPickup, handsOf, topLoad, topRPE, e1rmOf,
     setsDetailOf, holdSecondsOf, topSetDegraded,
+    DEFAULT_EDGE_MM, edgeMmOf, cycleEdgeMm, strengthKey, edgeLabel,
     e1rm, heavyAnchor, volumeAnchor, backoffAnchor, deloadAnchor,
     expandBlock, expandCycle, annotateWeekAnchors,
     recoveryFlag, deloadTrend, wmJumpGuard, guardrails,

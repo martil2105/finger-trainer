@@ -99,8 +99,17 @@
 
   // ---- derive today's plan ---------------------------------------------
   // Returns annotated generatedWeeks for the active cycle.
-  App.getWeeks = function (cycle, wmFor) {
-    return Calc.expandCycle(cycle).map(w => Calc.annotateWeekAnchors(w, wmFor));
+  // edgeOverride: "today I'm on the other edge". Applied BEFORE anchors are
+  // computed so the prescribed load comes from that edge's Working Max — the
+  // whole point of the override is that a 20mm anchor is wrong at 15mm.
+  // Pickups are excluded: their edge is a property of the block, and they
+  // don't use Working Maxes at all.
+  App.getWeeks = function (cycle, wmFor, edgeOverride) {
+    const ov = (edgeOverride != null && isFinite(+edgeOverride) && +edgeOverride > 0) ? +edgeOverride : null;
+    return Calc.expandCycle(cycle).map(w => {
+      const wk = (ov != null && w.modality !== 'pickup') ? Object.assign({}, w, { edgeMm: ov }) : w;
+      return Calc.annotateWeekAnchors(wk, wmFor);
+    });
   };
 
   App.buildPlan = function (cycle, weeks, dateIso, wmFor) {
@@ -120,6 +129,7 @@
           : 'Find max load held for the full duration @9–9.5. Update your Working Max after.';
         return { rest: false, role: 'Test', week: wk, blockName: week.blockName,
           duration: week.testDurations[0], testDurations: week.testDurations,
+          edgeMm: week.edgeMm,
           rpe: '9–9.5', protocol: 'test', sets: 1, anchor: null, note: primaryNote };
       }
       // Only the OI primer slot gets the deload session — Volume (Thu) stays rest
@@ -127,6 +137,7 @@
       if (structRole === 'OIprimer') {
         return { rest: false, role: 'Deload', week: wk, blockName: week.blockName,
           duration: 5, rpe: 6, protocol: 'deload', sets: 3, anchor: week.deloadAnchorKg,
+          edgeMm: week.edgeMm,
           note: 'Easy deload — 3 sets @6 at 75% of 5s WM. Keep it light.' };
       }
       // Day immediately after Heavy = secondary test (if multiple durations, e.g. W15 5s Sat + 3s Sun)
@@ -138,7 +149,7 @@
         if (heavyIdx >= 0 && (dowIdx - heavyIdx + 7) % 7 === 1) {
           const secDur = week.testDurations[1];
           return { rest: false, role: 'Test', week: wk, blockName: week.blockName,
-            duration: secDur, testDurations: [secDur],
+            duration: secDur, testDurations: [secDur], edgeMm: week.edgeMm,
             rpe: '9–9.5', protocol: 'test', sets: 1, anchor: null,
             note: `Secondary benchmark (${secDur}s) — full rest since yesterday's ${week.testDurations[0]}s test. Find max load @9–9.5. This result anchors next cycle's Peak WM.` };
         }
@@ -167,11 +178,13 @@
       return { rest: false, role: 'Heavy', week: wk, blockName: week.blockName,
         duration: week.heavyDuration, rpe: week.heavyRPE, protocol: week.heavyProtocol,
         sets: week.heavySets, anchor: week.heavyAnchorKg, backoffAnchor: week.backoffAnchorKg,
+        edgeMm: week.edgeMm,
         warmup: week.warmup, isLastBlockWeek, wmMissing: week.wmMissing };
     }
     if (structRole === 'Volume') {
       return { rest: false, role: 'Volume', week: wk, blockName: week.blockName,
         duration: week.volumeDuration, rpe: '7–8', protocol: 'fixedVolume',
+        edgeMm: week.edgeMm,
         sets: week.volumeSets, anchor: week.volumeAnchorKg, pct: week.volumePct };
     }
     if (structRole === 'OIprimer') {
@@ -235,10 +248,11 @@
   };
   App.go = function (tab) { App.state.tab = tab; App.render(); };
 
+  // wmFor(durationSeconds, edgeMm) -> kg or null. One pass over the WM store
+  // instead of the old fixed 5/3/7 fetch: Working Maxes are now keyed on the
+  // edge as well as the duration, so the set of live keys isn't known up front.
   async function wmForFn() {
-    const [w5, w3, w7] = await Promise.all([DB.currentWM(5), DB.currentWM(3), DB.currentWM(7)]);
-    const map = { 5: w5 && w5.valueKg, 3: w3 && w3.valueKg, 7: w7 && w7.valueKg };
-    return (d) => (map[d] != null ? map[d] : null);
+    return DB.wmLookup();
   }
 
   // =====================================================================
@@ -261,7 +275,7 @@
       view.appendChild(banner);
     }
 
-    const weeks = App.getWeeks(cycle, wmFor);
+    const weeks = App.getWeeks(cycle, wmFor, sessionEdgeToday());
     const plan = App.buildPlan(cycle, weeks, todayISO(), wmFor);
 
     // header: logo tile + week/block + next benchmark
@@ -328,8 +342,17 @@
       await attachPickupRefs(plan, logs);
       view.appendChild(pickupSessionCard(plan, { blockType: curWeek && curWeek.blockType, tops }));
     } else {
-      const lastSession = logs.find(l => l.type === 'Yielding' && l.hangDurationSeconds === plan.duration && l.topSetLoadKg != null);
-      view.appendChild(sessionCard(plan, { blockType: curWeek && curWeek.blockType, lastSession }));
+      // "Last session" must match the EDGE as well as the duration — showing a
+      // 20mm top set as the reference for a 15mm session is the exact
+      // comparison this whole change exists to prevent.
+      const planEdge = Calc.edgeMmOf(plan);
+      const lastSession = logs.find(l => l.type === 'Yielding' && !Calc.isPickup(l) &&
+        l.hangDurationSeconds === plan.duration && l.topSetLoadKg != null &&
+        Calc.edgeMmOf(l) === planEdge);
+      view.appendChild(sessionCard(plan, {
+        blockType: curWeek && curWeek.blockType, lastSession,
+        knownEdges: knownHangEdges(logs)
+      }));
     }
 
     // pick a different workout
@@ -467,6 +490,80 @@
     App.sheet("This week's workouts", body);
   }
 
+  // ---- edge selection ----------------------------------------------------
+  // App.state.sessionEdgeMm is a TODAY-ONLY override: it changes which edge
+  // this session is planned and logged on, and is deliberately not persisted.
+  // The program's own edge is the default every time the app is opened, so an
+  // occasional off-edge session can never quietly become the new normal. The
+  // PWA can stay open for days, so the override is also stamped with the day it
+  // was set and expires on its own — otherwise Tuesday's off-edge choice would
+  // still be silently labelling Wednesday's session.
+  App.state.sessionEdgeMm = null;
+  App.state.sessionEdgeDate = null;
+  function setSessionEdge(mm) {
+    App.state.sessionEdgeMm = mm;
+    App.state.sessionEdgeDate = todayISO();
+    App.render();
+  }
+  function sessionEdgeToday() {
+    if (App.state.sessionEdgeMm == null) return null;
+    if (App.state.sessionEdgeDate !== todayISO()) {
+      App.state.sessionEdgeMm = null; App.state.sessionEdgeDate = null;
+      return null;
+    }
+    return App.state.sessionEdgeMm;
+  }
+  App.sessionEdgeToday = sessionEdgeToday;
+
+  function edgePicker(currentEdge, knownEdges) {
+    const cur = currentEdge != null ? +currentEdge : Calc.DEFAULT_EDGE_MM;
+    const opts = Array.from(new Set(
+      [cur].concat(knownEdges || []).map(Number).filter(v => isFinite(v) && v > 0)
+    )).sort((a, b) => a - b);
+    const row = el('div', { class: 'row', style: 'margin:2px 0 10px' }, [
+      el('span', { class: 'micro anchor-label' }, ['Edge'])
+    ]);
+    const seg = el('div', { class: 'seg' });
+    opts.forEach(mm => {
+      seg.appendChild(el('button', {
+        class: mm === cur ? 'sel' : '',
+        onclick: () => setSessionEdge(mm)
+      }, [Calc.edgeLabel(mm)]));
+    });
+    seg.appendChild(el('button', { onclick: () => openEdgeSheet(cur) }, ['…']));
+    row.appendChild(seg);
+    return row;
+  }
+
+  function openEdgeSheet(cur) {
+    const mmSt = stepper({ min: 6, max: 40, step: 1, value: cur, fmt: v => v + ' mm' });
+    App.sheet('Edge for today', [
+      el('p', { class: 'muted' }, [
+        'Applies to this session only. Loads, Working Max and the strength trend are tracked separately per edge — ' +
+        'a smaller edge is a different exercise, not a bad day.'
+      ]),
+      el('div', { class: 'field' }, [el('label', null, ['Edge depth']), mmSt]),
+      el('button', { class: 'btn', onclick: () => {
+        const v = mmSt.getValue();
+        App.closeSheet();
+        setSessionEdge(v);
+      } }, ['Use this edge'])
+    ]);
+  }
+
+  // Every edge that already has hang data, so the picker offers what he
+  // actually trains rather than a fixed list.
+  function knownHangEdges(logs) {
+    const set = new Set();
+    (logs || []).forEach(l => {
+      if (!l || Calc.isPickup(l) || l.type !== 'Yielding') return;
+      if (l.topSetLoadKg == null) return;
+      set.add(Calc.edgeMmOf(l));
+    });
+    return Array.from(set).sort((a, b) => a - b);
+  }
+  App.knownHangEdges = knownHangEdges;
+
   function sessionCard(plan, ctx) {
     const c = el('div', { class: 'card', style: 'padding:16px' });
     const roleLabel = { Heavy: 'Heavy yielding', Volume: 'Volume yielding', OIprimer: 'OI primer',
@@ -483,10 +580,19 @@
     ]));
     const bits = [];
     if (plan.duration) bits.push(`${plan.duration}s hangs`);
+    if (plan.edgeMm) bits.push(Calc.edgeLabel(plan.edgeMm));
     if (plan.rpe) bits.push(`@${plan.rpe}`);
     if (plan.sets) bits.push(`${plan.sets} ${plan.role === 'Heavy' && plan.protocol === 'topSetPlusBackoffs' ? 'back-offs' : plan.protocol === 'maxSingles' ? 'singles' : 'sets'}`);
     bits.push(plan.protocol === 'maxSingles' ? '4–5 min rest' : '3 min rest');
     c.appendChild(el('p', { class: 'sc-meta' }, [bits.join(' · ')]));
+
+    // Edge switch. It lives HERE rather than inside the runner because the
+    // anchor below has to change with it — a 15mm session anchored to the
+    // 20mm Working Max prescribes a load that was never possible on that edge.
+    // Changing it re-derives the whole plan from that edge's WM.
+    if (plan.role !== 'OIprimer') {
+      c.appendChild(edgePicker(plan.edgeMm, (ctx && ctx.knownEdges) || []));
+    }
 
     if (plan.anchor != null || plan.role === 'OIprimer') {
       const aRow = el('div', { class: 'anchor-row' });
@@ -512,7 +618,9 @@
       c.appendChild(el('p', { class: 'muted', style: 'margin:0 0 10px' }, [`Back-offs around ~${plan.backoffAnchor} kg (@7–8, ~4–5 kg below top).`]));
     }
     if (plan.wmMissing) {
-      c.appendChild(el('div', { class: 'banner danger' }, [`No ${plan.duration}s Working Max on file — set a benchmark for a correct anchor.`]));
+      c.appendChild(el('div', { class: 'banner danger' }, [
+        `No ${plan.duration}s Working Max on file at ${Calc.edgeLabel(plan.edgeMm)} — set a benchmark on this edge for a correct anchor. ` +
+        'Until then, let RPE lead and the first session will set the reference.']));
     }
 
     // Fixed warm-up ladder (shown when the program defines one)
@@ -857,6 +965,8 @@
   function dowShort(iso) { return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short' }); }
 
   App.state.analyticsModality = null;   // null = auto-pick on first render
+  App.state.analyticsEdgeMm = null;     // null = auto-pick the most recent edge
+  App.state.settingsEdgeMm = null;      // which edge the WM editors write to
 
   const HAND_COLOR = { L: '#F0A24E', R: '#3D87F5' };   // same as the runner
   const HAND_NAME = { L: 'Left', R: 'Right' };
@@ -906,7 +1016,41 @@
     ]));
 
     const logs = preLogs || (await DB.logsNewestFirst()).slice().reverse(); // oldest -> newest
-    const yielding = logs.filter(l => l.type === 'Yielding' && l.e1rmKg != null);
+    const allYielding = logs.filter(l => l.type === 'Yielding' && l.e1rmKg != null);
+
+    // ---- edge split (2026-08-16) ----------------------------------------
+    // Every strength series below is filtered to ONE edge. There is no
+    // conversion between edges and no pooled view, on purpose: moving from
+    // 20mm to 15mm drops the load several kg at identical strength, so a
+    // pooled trend would draw that as a sudden loss, the Kalman filter would
+    // absorb it as a real level change, and the projection would extrapolate
+    // from it. Fatigue metrics further down (next-day feel, weekly volume,
+    // session count) deliberately stay pooled — those are about total load on
+    // the fingers, which doesn't care which edge produced it.
+    const edges = Array.from(new Set(allYielding.map(l => Calc.edgeMmOf(l)))).sort((a, b) => a - b);
+    if (App.state.analyticsEdgeMm == null || !edges.includes(App.state.analyticsEdgeMm)) {
+      // Default to the edge of the most recent session — the one being trained
+      // now, which is what "how am I doing" means on any given day.
+      const latest = allYielding.length ? allYielding[allYielding.length - 1] : null;
+      App.state.analyticsEdgeMm = latest ? Calc.edgeMmOf(latest) : Calc.DEFAULT_EDGE_MM;
+    }
+    const edgeMm = App.state.analyticsEdgeMm;
+    const edgeTxt = Calc.edgeLabel(edgeMm);
+    if (edges.length > 1) {
+      view.appendChild(el('div', { class: 'row', style: 'margin:-4px 0 4px' }, [
+        el('span', { class: 'micro anchor-label' }, ['Edge']),
+        el('div', { class: 'seg' }, edges.map(mm =>
+          el('button', {
+            class: mm === edgeMm ? 'sel' : '',
+            onclick: () => { App.state.analyticsEdgeMm = mm; App.render(); }
+          }, [Calc.edgeLabel(mm)])))
+      ]));
+      view.appendChild(el('p', { class: 'card-note', style: 'margin:0 0 10px' }, [
+        `Strength trends below are ${edgeTxt} only — edges are tracked separately, ` +
+        'never converted. Fatigue and volume further down cover all sessions.'
+      ]));
+    }
+    const yielding = allYielding.filter(l => Calc.edgeMmOf(l) === edgeMm);
     const cycle = await DB.activeCycle();
     const wmFor = await wmForFn();
     const weeks = cycle ? App.getWeeks(cycle, wmFor) : [];
@@ -919,10 +1063,23 @@
     // gate inside fitRpeCurve), every Analytics series below is recomputed
     // through it from load+RPE. Stored e1rmKg, WMs, anchors, and all
     // training math stay on the generic table — calc.js is untouched.
+    //
+    // EDGE: fitRpeCurve works from the LOAD RATIO between sessions less than
+    // 14 days apart. Two sessions on different edges are ~25% apart in load at
+    // identical strength, so a mixed pool would charge that gap to the RPE
+    // spacing and could produce a badly wrong k that still passes the
+    // out-of-sample gate — silently distorting every displayed E1RM. So the
+    // fit is per-edge. RPE spacing really is a property of the person rather
+    // than the edge, but pooling correctly would need per-edge level curves
+    // inside rpe_cal.js, and that module's validation doesn't cover it. The
+    // cost of staying per-edge is only that a thin edge falls back to the
+    // generic 6%/pt curve — which is exactly the stored values, i.e. the
+    // behaviour before any of this existed.
     const rpePts = yielding
       .filter(l => l.topSetLoadKg != null && l.topSetRPE != null)
       .map(l => ({ date: l.date, load: l.topSetLoadKg, rpe: l.topSetRPE, dur: l.hangDurationSeconds }));
     benches.forEach(b => {
+      if (Calc.edgeMmOf(b) !== edgeMm) return;
       if (b.maxLoadKg != null && b.rpe != null) rpePts.push({ date: b.date, load: b.maxLoadKg, rpe: b.rpe, dur: b.durationSeconds });
     });
     const rpeCal = (typeof fitRpeCurve === 'function') ? fitRpeCurve(rpePts) : { k: 0.06, source: 'default', n: 0 };
@@ -976,7 +1133,7 @@
     const last3raw = r3raw.length ? r3raw[r3raw.length - 1].y : null;
     const delta = combined.length >= 2 ? Calc.roundTo(combined[combined.length - 1].y - combined[0].y, 1) : null;
     hero.appendChild(el('div', { class: 'row' }, [
-      el('span', { class: 'micro' }, ['5s E1RM']),
+      el('span', { class: 'micro' }, [`5s E1RM · ${edgeTxt}`]),
       delta != null
         ? el('span', { class: 'tint-chip ' + (delta >= 0 ? 'green' : 'amber') },
             [`${delta >= 0 ? '+' : '−'}${Math.abs(delta)} kg ${isAll ? 'all-time' : 'this cycle'}`])
@@ -1009,7 +1166,7 @@
     view.appendChild(hero);
 
     // ---- 3s E1RM trend (raw, unnormalised) ----
-    view.appendChild(el('h2', null, ['3s E1RM · raw']));
+    view.appendChild(el('h2', null, [`3s E1RM · raw · ${edgeTxt}`]));
     if (r3raw.length >= 2) {
       const c3 = el('div', { class: 'card', style: 'margin-top:0' });
       c3.appendChild(lineChart([
@@ -1121,7 +1278,7 @@
     // converted UP to 3s-equivalent by a factor estimated from Martin's OWN
     // 5s→3s data (trend-continuity ≈ 1.08; matches the ~10% short-hang premium).
     // Nothing here feeds anchors, Working Maxes, or any training math.
-    view.appendChild(el('h2', null, ['E1RM projection · 3s']));
+    view.appendChild(el('h2', null, [`E1RM projection · 3s · ${edgeTxt}`]));
     const durFactor = (typeof estimateDurationFactor === 'function')
       ? estimateDurationFactor(s5all, s3raw, { default: 1.10 })
       : { factor: 1.10, source: 'default', n: 0 };
@@ -1145,7 +1302,7 @@
         drawStochasticCone(hist3, proj, coneCard, { unit: 'kg', todayX: todayISO() });
         const t = proj.targets[0];
         if (t) {
-          const wm = wmFor(3);   // compare 3s projection against the 3s Working Max
+          const wm = wmFor(3, edgeMm);   // 3s Working Max ON THIS EDGE
           let verdict;
           if (wm == null) {
             verdict = 'Projected ~' + t.y + ' kg at ' + t.label + ' (90%: ' + t.lo + '–' + t.hi + ').';
@@ -1180,7 +1337,7 @@
     // strength loss while training continues is treated as unlikely, because
     // single-session dips are expression noise, not lost strength. Nothing
     // here feeds anchors, Working Maxes, or any training math.
-    view.appendChild(el('h2', null, ['Filtered strength · 3s']));
+    view.appendChild(el('h2', null, [`Filtered strength · 3s · ${edgeTxt}`]));
     if (typeof drawKalmanTrack !== 'function' || typeof buildKalmanTrack !== 'function') {
       view.appendChild(el('div', { class: 'card' }, ['Filtered-strength layer not loaded.']));
     } else if (hist3.length < 3) {
@@ -1225,17 +1382,24 @@
     if (!benchesDesc.length) {
       view.appendChild(el('div', { class: 'card' }, ['No benchmark tests logged yet. Test weeks update your Working Max here.']));
     } else {
+      const benchEdges = Array.from(new Set(benches.map(b => Calc.edgeMmOf(b))));
+      const showEdge = benchEdges.length > 1;
       const t = el('table', { class: 'prev' });
-      t.appendChild(el('tr', { html: '<th>Date</th><th>Dur</th><th>Max kg</th><th>RPE</th><th>Δ</th>' }));
-      // deltas vs the previous test of the same duration (ascending pass)
-      const deltas = {}; const lastByDur = {};
+      t.appendChild(el('tr', { html: '<th>Date</th><th>Dur</th>' + (showEdge ? '<th>Edge</th>' : '') +
+        '<th>Max kg</th><th>RPE</th><th>Δ</th>' }));
+      // Deltas vs the previous test at the same duration AND edge — a 15mm
+      // test following a 20mm one is not a −6 kg regression.
+      const deltas = {}; const lastByKey = {};
       benches.forEach(b => {
-        deltas[b.id] = lastByDur[b.durationSeconds] != null ? b.maxLoadKg - lastByDur[b.durationSeconds] : null;
-        lastByDur[b.durationSeconds] = b.maxLoadKg;
+        const k = Calc.strengthKey(b.durationSeconds, Calc.edgeMmOf(b));
+        deltas[b.id] = lastByKey[k] != null ? Calc.roundTo(b.maxLoadKg - lastByKey[k], 1) : null;
+        lastByKey[k] = b.maxLoadKg;
       });
       benchesDesc.forEach(b => {
         t.appendChild(el('tr', { html:
-          `<td>${fmtDate(b.date)}</td><td>${b.durationSeconds}s</td><td>${b.maxLoadKg}</td><td>@${b.rpe}</td><td>${deltas[b.id] == null ? '—' : (deltas[b.id] >= 0 ? '+' : '') + deltas[b.id]}</td>` }));
+          `<td>${fmtDate(b.date)}</td><td>${b.durationSeconds}s</td>` +
+          (showEdge ? `<td>${Calc.edgeLabel(Calc.edgeMmOf(b))}</td>` : '') +
+          `<td>${b.maxLoadKg}</td><td>@${b.rpe}</td><td>${deltas[b.id] == null ? '—' : (deltas[b.id] >= 0 ? '+' : '') + deltas[b.id]}</td>` }));
       });
       view.appendChild(el('div', { class: 'card' }, [t]));
     }
@@ -2025,7 +2189,8 @@
         el('span', { class: 'li-date' }, [fmtDate(l.date)]),
         el('span', { class: 'muted' }, [
           pickup ? `Block pull · ${Calc.holdSecondsOf(l) || '?'}s${l.edgeMm ? ' · ' + l.edgeMm + 'mm' : ''}`
-                 : `${l.role || l.type} · ${l.venue || ''}`
+                 : `${l.role || l.type} · ${l.venue || ''}` +
+                   (l.type === 'Yielding' && l.topSetLoadKg != null ? ' · ' + Calc.edgeLabel(Calc.edgeMmOf(l)) : '')
         ])
       ]));
       const bits = [];
@@ -2059,10 +2224,35 @@
   // =====================================================================
   async function renderSettings(view) {
     view.appendChild(el('h1', null, ['Settings']));
-    const [w5, w3, bw] = await Promise.all([DB.currentWM(5), DB.currentWM(3), DB.getMeta('bodyweightKg')]);
+    const bw = await DB.getMeta('bodyweightKg');
 
-    view.appendChild(wmEditor('5s Working Max', 5, w5));
-    view.appendChild(wmEditor('3s Working Max', 3, w3));
+    // Working Maxes are per (duration, edge). Which edge these editors write to
+    // is explicit — silently editing the 20mm max while training 15mm is the
+    // whole class of mistake this change exists to prevent.
+    const settingsLogs = await DB.logsNewestFirst();
+    const activeCyc = await DB.activeCycle();
+    const wmEdges = Array.from(new Set(
+      knownHangEdges(settingsLogs.slice().reverse())
+        .concat([Calc.cycleEdgeMm(activeCyc)])
+    )).sort((a, b) => a - b);
+    if (App.state.settingsEdgeMm == null || !wmEdges.includes(App.state.settingsEdgeMm)) {
+      const recent = settingsLogs.find(l => !Calc.isPickup(l) && l.type === 'Yielding' && l.topSetLoadKg != null);
+      App.state.settingsEdgeMm = recent ? Calc.edgeMmOf(recent) : Calc.DEFAULT_EDGE_MM;
+    }
+    const sEdge = App.state.settingsEdgeMm;
+    if (wmEdges.length > 1) {
+      view.appendChild(el('div', { class: 'row', style: 'margin:0 0 8px' }, [
+        el('span', { class: 'micro anchor-label' }, ['Working Max edge']),
+        el('div', { class: 'seg' }, wmEdges.map(mm =>
+          el('button', {
+            class: mm === sEdge ? 'sel' : '',
+            onclick: () => { App.state.settingsEdgeMm = mm; App.render(); }
+          }, [Calc.edgeLabel(mm)])))
+      ]));
+    }
+    const [w5, w3] = await Promise.all([DB.currentWM(5, sEdge), DB.currentWM(3, sEdge)]);
+    view.appendChild(wmEditor(`5s Working Max · ${Calc.edgeLabel(sEdge)}`, 5, w5, sEdge));
+    view.appendChild(wmEditor(`3s Working Max · ${Calc.edgeLabel(sEdge)}`, 3, w3, sEdge));
 
     // Bodyweight — used for total-load (bodyweight + added) and %BW analytics.
     const bwCard = el('div', { class: 'card' });
@@ -2085,12 +2275,15 @@
       const c = el('div', { class: 'card' }, [el('h2', { style: 'margin-top:0' }, ['WM history'])]);
       allWM.forEach(w => {
         const item = el('div', { class: 'row', style: 'margin:8px 0' }, [
-          el('span', { class: 'muted' }, [`${w.durationSeconds}s · ${w.valueKg} kg · ${fmtDate(w.date)} · ${w.source}`]),
+          // Edge is shown unconditionally: without it two "3s" maxes on
+          // different edges are indistinguishable in this list, and the delete
+          // button below is destructive.
+          el('span', { class: 'muted' }, [`${w.durationSeconds}s · ${Calc.edgeLabel(Calc.edgeMmOf(w))} · ${w.valueKg} kg · ${fmtDate(w.date)} · ${w.source}`]),
           el('button', {
             class: 'btn small ghost',
             style: 'margin:0;padding:2px 8px;min-height:28px;font-size:12px;border-radius:6px;width:auto;',
             onclick: () => {
-              App.confirm(`Delete this ${w.durationSeconds}s WM history entry (${w.valueKg} kg on ${fmtDate(w.date)})?`, 'Delete', async () => {
+              App.confirm(`Delete this ${w.durationSeconds}s ${Calc.edgeLabel(Calc.edgeMmOf(w))} WM history entry (${w.valueKg} kg on ${fmtDate(w.date)})?`, 'Delete', async () => {
                 await DB.softDelete('workingMaxes', w.id);
                 App.render();
               });
@@ -2283,7 +2476,7 @@
     view.appendChild(footer);
   }
 
-  function wmEditor(label, duration, current) {
+  function wmEditor(label, duration, current, edgeMm) {
     const c = el('div', { class: 'card' });
     c.appendChild(el('div', { class: 'row' }, [el('h2', { style: 'margin:0' }, [label]),
       el('span', { class: 'muted' }, [current ? fmtDate(current.date) : 'not set'])]));
@@ -2294,7 +2487,8 @@
       const cur = current ? current.valueKg : null;
       const guard = Calc.wmJumpGuard(newVal, cur);
       const save = async () => {
-        await DB.save('workingMaxes', { id: Templates.uid(), durationSeconds: duration, valueKg: newVal,
+        await DB.save('workingMaxes', { id: Templates.uid(), durationSeconds: duration,
+          edgeMm: edgeMm != null ? edgeMm : Calc.DEFAULT_EDGE_MM, valueKg: newVal,
           date: todayISO(), source: 'manual', notes: '' });
         App.render();
         if (window.Sync && Sync.auto) Sync.auto({ force: true });
@@ -2319,15 +2513,32 @@
   // =====================================================================
   // MANUAL LOG MODAL (also used for editing)
   // =====================================================================
-  App.openManualLog = function (existing) {
+  App.openManualLog = async function (existing) {
     // Pickup records have a different shape entirely — send them to their own
     // editor rather than letting this form write nulls over the hands object.
     if (Calc.isPickup(existing)) return App.openPickupLog(existing);
     const e = existing || {};
+    // Edge default for a NEW entry: whichever edge was trained most recently,
+    // not a hardcoded 20. Editing an existing record always keeps its own edge.
+    // (Async only for this lookup; every caller is a fire-and-forget onclick.)
+    let defaultEdge = Calc.edgeMmOf(e);
+    if (!existing) {
+      const ovEdge = App.sessionEdgeToday();
+      if (ovEdge != null) {
+        defaultEdge = ovEdge;
+      } else {
+        try {
+          const recent = (await DB.logsNewestFirst())
+            .find(l => !Calc.isPickup(l) && l.type === 'Yielding' && l.topSetLoadKg != null);
+          if (recent) defaultEdge = Calc.edgeMmOf(recent);
+        } catch (err) { /* fall back to 20mm */ }
+      }
+    }
     const body = [];
     const state = {
       date: e.date || todayISO(), type: e.type || 'Yielding', role: e.role || 'Heavy',
       venue: e.venue || 'Board', hangDurationSeconds: e.hangDurationSeconds || 5,
+      edgeMm: defaultEdge,
       grip: e.grip || 'HalfCrimp', load: e.topSetLoadKg, rpe: e.topSetRPE,
       sets: e.sets, taxing: e.taxing, felt: e.feltStrong, ndf: e.nextDayFeel, notes: e.notes || ''
     };
@@ -2346,6 +2557,10 @@
     body.push(selectField('Role', ['Heavy', 'Volume', 'OIprimer', 'Climb', 'Test', 'Deload'], state.role, v => state.role = v));
     body.push(selectField('Venue', ['Board', 'Gym', 'Outdoor', 'Home', 'Beastmaker', 'Other'], state.venue, v => state.venue = v));
     body.push(selectField('Hang duration', ['5', '3', '7'], String(state.hangDurationSeconds), v => { state.hangDurationSeconds = +v; }));
+    // Edge depth. Sits next to duration because it plays the same role: both
+    // define which strength series this session belongs to.
+    const edgeSt = stepper({ min: 6, max: 40, step: 1, value: state.edgeMm, fmt: v => v + ' mm', onChange: v => state.edgeMm = v });
+    body.push(el('div', { class: 'field' }, [el('label', null, ['Edge depth']), edgeSt]));
     body.push(selectField('Grip', ['HalfCrimp', 'OpenHand', 'ThreeFingerDrag'], state.grip, v => state.grip = v));
 
     // load + rpe steppers
@@ -2425,6 +2640,7 @@
       const entry = {
         id: e.id || Templates.uid(), date: state.date, type: state.type, role: state.role, venue: state.venue,
         hangDurationSeconds: state.type === 'Yielding' ? state.hangDurationSeconds : null, grip: state.grip,
+        edgeMm: edgeSt.getValue(),
         topSetLoadKg: state.type === 'Yielding' ? loadSt.getValue() : null,
         topSetRPE: state.type === 'Yielding' ? rpeSt.getValue() : null,
         // Per-set detail: [0] mirrors the top-set steppers, rest come from the
@@ -2619,20 +2835,26 @@
 
   async function maybeBenchmark(entry) {
     const dur = entry.hangDurationSeconds || 5;
-    const cur = await DB.currentWM(dur);
+    // Edge is part of the identity of a Working Max. Without it a 15mm test
+    // would overwrite the 20mm anchor and every subsequent 20mm session would
+    // be prescribed several kg light — with nothing in the numbers to show it.
+    const edge = Calc.edgeMmOf(entry);
+    const edgeTxt = Calc.edgeLabel(edge);
+    const cur = await DB.currentWM(dur, edge);
     await DB.save('benchmarks', { id: Templates.uid(), date: entry.date, durationSeconds: dur,
-      maxLoadKg: entry.topSetLoadKg, rpe: entry.topSetRPE, resultingWMId: null });
+      edgeMm: edge, maxLoadKg: entry.topSetLoadKg, rpe: entry.topSetRPE, resultingWMId: null });
     // offer to update WM
     const guard = Calc.wmJumpGuard(entry.topSetLoadKg, cur && cur.valueKg);
     const apply = async () => {
-      await DB.save('workingMaxes', { id: Templates.uid(), durationSeconds: dur, valueKg: entry.topSetLoadKg,
-        date: entry.date, source: 'test', notes: 'From benchmark test' });
+      await DB.save('workingMaxes', { id: Templates.uid(), durationSeconds: dur, edgeMm: edge,
+        valueKg: entry.topSetLoadKg,
+        date: entry.date, source: 'test', notes: `From benchmark test (${edgeTxt})` });
       App.render();
     };
     if (guard.triggered) {
-      App.confirm(`Test logged. That's a big jump (+${guard.pct}%) for your ${dur}s WM. Update it to ${entry.topSetLoadKg} kg? If it felt like an absolute ceiling, consider 1–2 kg lower.`, `Set ${dur}s WM`, apply);
+      App.confirm(`Test logged. That's a big jump (+${guard.pct}%) for your ${dur}s ${edgeTxt} WM. Update it to ${entry.topSetLoadKg} kg? If it felt like an absolute ceiling, consider 1–2 kg lower.`, `Set ${dur}s ${edgeTxt} WM`, apply);
     } else {
-      App.confirm(`Test logged. Update your ${dur}s Working Max to ${entry.topSetLoadKg} kg?`, `Set ${dur}s WM`, apply);
+      App.confirm(`Test logged. Update your ${dur}s ${edgeTxt} Working Max to ${entry.topSetLoadKg} kg?`, `Set ${dur}s ${edgeTxt} WM`, apply);
     }
   }
   App.maybeBenchmark = maybeBenchmark;
@@ -2646,30 +2868,41 @@
   // test days — the benchmark is automatic, the anchor change is a choice.
   async function maybeAutoBenchmarkPR(entry) {
     if (!entry || entry.type !== 'Yielding' || entry.topSetLoadKg == null || !entry.hangDurationSeconds) return;
+    if (Calc.isPickup(entry)) return;
     const dur = entry.hangDurationSeconds;
+    // A PR is only a PR against the same duration ON THE SAME EDGE. Comparing
+    // across edges breaks in both directions: the first 15mm sessions would
+    // never register a PR (they can't beat 20mm loads), and a later return to
+    // 20mm would fire a false PR against the 15mm baseline and offer to move
+    // the Working Max onto it.
+    const edge = Calc.edgeMmOf(entry);
+    const edgeTxt = Calc.edgeLabel(edge);
     const [logs, benches] = await Promise.all([DB.getAll('logEntries'), DB.getAll('benchmarks')]);
-    const prevLogs = logs.filter(l => l.id !== entry.id && l.type === 'Yielding' &&
-      l.hangDurationSeconds === dur && l.topSetLoadKg != null).map(l => l.topSetLoadKg);
-    const prevBench = benches.filter(b => b.durationSeconds === dur && b.maxLoadKg != null).map(b => b.maxLoadKg);
+    const prevLogs = logs.filter(l => l.id !== entry.id && l.type === 'Yielding' && !Calc.isPickup(l) &&
+      l.hangDurationSeconds === dur && l.topSetLoadKg != null &&
+      Calc.edgeMmOf(l) === edge).map(l => l.topSetLoadKg);
+    const prevBench = benches.filter(b => b.durationSeconds === dur && b.maxLoadKg != null &&
+      Calc.edgeMmOf(b) === edge).map(b => b.maxLoadKg);
     const baseline = prevLogs.concat(prevBench);
-    if (!baseline.length) return;                      // first entry for this duration — no PR to beat
+    if (!baseline.length) return;                      // first entry at this duration+edge — no PR to beat
     const prevBest = Math.max.apply(null, baseline);
     if (!(entry.topSetLoadKg > prevBest)) return;      // not a PR
 
-    const cur = await DB.currentWM(dur);
-    await DB.save('benchmarks', { id: Templates.uid(), date: entry.date, durationSeconds: dur,
+    const cur = await DB.currentWM(dur, edge);
+    await DB.save('benchmarks', { id: Templates.uid(), date: entry.date, durationSeconds: dur, edgeMm: edge,
       maxLoadKg: entry.topSetLoadKg, rpe: entry.topSetRPE, resultingWMId: null, source: 'session-pr' });
     const guard = Calc.wmJumpGuard(entry.topSetLoadKg, cur && cur.valueKg);
     const apply = async () => {
-      await DB.save('workingMaxes', { id: Templates.uid(), durationSeconds: dur, valueKg: entry.topSetLoadKg,
-        date: entry.date, source: 'session-pr', notes: 'From session PR (auto benchmark)' });
+      await DB.save('workingMaxes', { id: Templates.uid(), durationSeconds: dur, edgeMm: edge,
+        valueKg: entry.topSetLoadKg,
+        date: entry.date, source: 'session-pr', notes: `From session PR (auto benchmark, ${edgeTxt})` });
       App.render();
     };
     const rpeTxt = entry.topSetRPE != null ? ` @${entry.topSetRPE}` : '';
     if (guard.triggered) {
-      App.confirm(`New ${dur}s PR — ${entry.topSetLoadKg} kg${rpeTxt} saved as a benchmark. That's a big jump (+${guard.pct}%) for your ${dur}s WM. Update it to ${entry.topSetLoadKg} kg? If it felt like an absolute ceiling, consider 1–2 kg lower.`, `Set ${dur}s WM`, apply);
+      App.confirm(`New ${dur}s ${edgeTxt} PR — ${entry.topSetLoadKg} kg${rpeTxt} saved as a benchmark. That's a big jump (+${guard.pct}%) for your ${dur}s ${edgeTxt} WM. Update it to ${entry.topSetLoadKg} kg? If it felt like an absolute ceiling, consider 1–2 kg lower.`, `Set ${dur}s ${edgeTxt} WM`, apply);
     } else {
-      App.confirm(`New ${dur}s PR — ${entry.topSetLoadKg} kg${rpeTxt} saved as a benchmark. Update your ${dur}s Working Max to ${entry.topSetLoadKg} kg?`, `Set ${dur}s WM`, apply);
+      App.confirm(`New ${dur}s ${edgeTxt} PR — ${entry.topSetLoadKg} kg${rpeTxt} saved as a benchmark. Update your ${dur}s ${edgeTxt} Working Max to ${entry.topSetLoadKg} kg?`, `Set ${dur}s ${edgeTxt} WM`, apply);
     }
   }
   App.maybeAutoBenchmarkPR = maybeAutoBenchmarkPR;
@@ -2677,14 +2910,17 @@
   // =====================================================================
   // CSV IMPORT / EXPORT (§14)
   // =====================================================================
-  const CSV_HEADER = 'date,type,role,venue,hangDurationSeconds,loadKg,rpe,sets,taxing,feltStrong,nextDayFeel,block,notes,e1rmKg';
+  // edgeMm appended at the END so a CSV written by an older build still imports
+  // (doImport indexes by header name, and a missing column reads as 20mm).
+  const CSV_HEADER = 'date,type,role,venue,hangDurationSeconds,loadKg,rpe,sets,taxing,feltStrong,nextDayFeel,block,notes,e1rmKg,edgeMm';
   App.exportCSV = async function () {
     const logs = (await DB.logsNewestFirst()).slice().reverse();
     const rows = [CSV_HEADER];
     logs.forEach(l => {
       rows.push([l.date, l.type, l.role || '', l.venue || '', l.hangDurationSeconds ?? '',
         l.topSetLoadKg ?? '', l.topSetRPE ?? '', l.sets ?? '', l.taxing ?? '', l.feltStrong ?? '',
-        l.nextDayFeel ?? '', csvq(l.block || ''), csvq(l.notes || ''), l.e1rmKg ?? ''].join(','));
+        l.nextDayFeel ?? '', csvq(l.block || ''), csvq(l.notes || ''), l.e1rmKg ?? '',
+        Calc.edgeMmOf(l)].join(','));
     });
     const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
     const a = el('a', { href: URL.createObjectURL(blob), download: `finger-trainer-${todayISO()}.csv` });
@@ -2753,9 +2989,14 @@
       // match an existing entry on date (+ role if it disambiguates same-day sessions)
       const sameDay = byDate[date] || [];
       let match = sameDay.find(e => (e.role || '') === role) || (sameDay.length === 1 ? sameDay[0] : null);
+      // Missing edgeMm column (any CSV written before 2026-08-16, and the
+      // bundled history import) keeps the record's own edge, which resolves to
+      // 20mm — the edge those sessions were actually trained on.
+      const edgeCsv = idx.edgeMm != null ? num(c[idx.edgeMm]) : null;
       const entry = {
         id: match ? match.id : Templates.uid(), date, type, role, venue: c[idx.venue] || '',
         hangDurationSeconds: dur, grip: (match && match.grip) || 'HalfCrimp',
+        edgeMm: edgeCsv != null && edgeCsv > 0 ? edgeCsv : Calc.edgeMmOf(match),
         topSetLoadKg: load, topSetRPE: rpe, sets: num(c[idx.sets]), bodyweightKg: (match && match.bodyweightKg) || null,
         taxing: num(c[idx.taxing]), feltStrong: num(c[idx.feltStrong]),
         nextDayFeel: num(c[idx.nextDayFeel]) != null ? num(c[idx.nextDayFeel]) : (match ? match.nextDayFeel : null),
@@ -2913,6 +3154,11 @@
       // session recovered after an app kill still logs under its real date.
       id: Templates.uid(), date: result.date || todayISO(), type: plan.role === 'OIprimer' ? 'OI' : 'Yielding',
       role: plan.role, venue: 'Board', hangDurationSeconds: plan.duration || null, grip: 'HalfCrimp',
+      // Which edge this was trained on. Falls back to the session override and
+      // then to 20mm, so a plan from an older cached cycle still logs sanely.
+      edgeMm: result.edgeMm != null ? result.edgeMm
+        : (plan.edgeMm != null ? plan.edgeMm
+           : (App.sessionEdgeToday() != null ? App.sessionEdgeToday() : Calc.DEFAULT_EDGE_MM)),
       topSetLoadKg: result.load != null ? result.load : null,
       topSetRPE: result.rpe != null ? result.rpe : null, sets: result.sets,
       // Per-effort capture from the runner: [{load, rpe}, ...] — top set first,
