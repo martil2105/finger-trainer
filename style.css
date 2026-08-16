@@ -1,674 +1,1050 @@
 /* ============================================================
-   style.css — "Daylight Chunky"
-   Bright, flat, chunky visual system per the design handoff:
-   white cards, 2px borders, hard offset shadows (never blurred),
-   heavy rounded type, tabular numerals on every data value.
-   No gamification. Runner keeps its dark focused environment.
+   style.css — "LATENT INSTRUMENT"
+
+   The aesthetic of the estimate. A bone plate, graphite ink in
+   four tones, ONE chromatic voice (ultramarine) spent on ~3% of
+   any surface, and ONE alarm (oxide) that appears at most once.
+
+   Rules this file obeys, everywhere, without exception:
+     · no shadow is thrown that a real object would not throw
+       (there are no drop shadows in this stylesheet — separation
+       is carried by hairlines and by tone)
+     · two type registers and nothing between them: a thin
+       geometric display face for values >= 18px, a monospaced
+       whisper for everything <= 13px
+     · hairlines are 1px; the only 2px strokes are deliberate
+       emphasis (the NOW marker, a selected register)
+     · corners are 2-3px. This is a plate, not a pill
+     · colour is scarce. Ordinal scales are carried by TONE,
+       not by hue; signal means "now / selected / the estimate";
+       oxide means "alarm / record" and nothing else
+
+   No gamification. The runner keeps a dark focused environment,
+   re-cut here as the instrument's reading mode.
    ============================================================ */
 
-:root {
-  /* ---- Daylight Chunky tokens (from handoff tokens.css) ---- */
-  --dc-bg: #F7F7FB;
-  --dc-surface: #FFFFFF;
-  --dc-ink: #2E2E42;
-  --dc-ink-sub: #7C7C96;
-  --dc-ink-faint: #A5A5BE;
-  --dc-line: #E5E5EF;
-  --dc-line-soft: #F0F0F6;
-  --dc-grid: #EFEFF3;
-  --dc-blue: #3D87F5;
-  --dc-blue-deep: #2C67C2;
-  --dc-blue-tint: #E9F1FE;
-  --dc-blue-muted: #D6E4FD;
-  --dc-blue-shadow: #C9DDFB;
-  --dc-green: #33B94F;
-  --dc-green-deep: #27963F;
-  --dc-green-tint: #E7F8EB;
-  --dc-amber: #F6A723;
-  --dc-amber-text: #D98C0A;
-  --dc-amber-tint: #FFF4DC;
-  --dc-amber-border: #F6DFA8;
-  --dc-amber-shadow: #F9E3B4;
-  --dc-amber-fine: #B99B54;
-  --dc-red: #F04E4E;
-  --dc-red-deep: #C43B3B;
-  --dc-red-tint: #FDEAEA;
-  --dc-purple: #9B6DF3;
-  --dc-rec-5: #33B94F;
-  --dc-rec-4: #9BDCA8;
-  --dc-rec-3: #F6C445;
-  --dc-rec-2: #F58F8F;
-  --dc-rec-1: #F04E4E;
-  --dc-series-secondary: #C9CDDA;
-  --dc-bar-neutral: #E3E3EE;
+/* ---- Self-hosted faces. Not CDN webfonts: these ship in the
+        repo and are cached by sw.js, so the app stays offline-
+        first. Subset to Latin-1 + the marks the app uses. ---- */
+@font-face {
+  font-family: 'LI Display';
+  src: url('fonts/jura-light.woff2') format('woff2');
+  font-weight: 300; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'LI Display';
+  src: url('fonts/jura-medium.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'LI Mono';
+  src: url('fonts/geistmono-regular.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'LI Mono';
+  src: url('fonts/geistmono-bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: swap;
+}
 
-  /* ---- legacy variable names, remapped so any code still
-         referencing them lands on daylight values ---- */
-  --bg: var(--dc-bg);
-  --bg2: var(--dc-surface);
-  --card: var(--dc-surface);
-  --card-hover: #FBFBFE;
-  --card-border: var(--dc-line);
-  --card-border-bright: #D8D8E6;
-  --accent: var(--dc-blue);
-  --accent-end: var(--dc-blue);
-  --accent-glow: rgba(61,135,245,0.22);
-  --danger: var(--dc-red);
-  --success: var(--dc-green);
-  --warn: var(--dc-amber);
-  --text: var(--dc-ink);
-  --text-dim: var(--dc-ink-sub);
-  --text-dimmer: var(--dc-ink-faint);
-  --radius: 20px;
+:root {
+  /* ---- Latent Instrument tokens ---- */
+  --li-bg: #EBE8DF;          /* the drawer the plate is kept in */
+  --li-surface: #F2F0E9;     /* the plate itself                */
+  --li-panel: #E4E1D6;       /* recess: inputs, inactive fills   */
+  --li-panel-2: #EDEAE2;     /* softest recess                   */
+
+  --li-ink: #1B1D21;         /* graphite, four tones             */
+  --li-ink-2: #4C5058;
+  --li-ink-3: #606266;       /* >= 4.5:1 on plate, page and recess */
+
+  --li-line: #C4C0B5;        /* hairline                         */
+  --li-line-2: #D9D5CA;      /* soft hairline                    */
+  --li-grid: #E1DED4;        /* chart grid                       */
+
+  --li-signal: #1B3FA8;      /* the one voice                    */
+  --li-signal-deep: #122C77;
+  --li-signal-tint: #E2E6F3;
+  --li-signal-mute: #B9C2DE;
+
+  --li-oxide: #B4441F;       /* the alarm, used once             */
+  --li-oxide-deep: #8C3416;
+  --li-oxide-tint: #F5E7E1;
+  --li-oxide-mute: #E3BFB1;
+
+  /* Hands. The ONE place both accents appear together: on a
+     session where the two alternate 16+ times, reading a word is
+     slower than reading a colour, and mixing them up silently
+     mislabels that day's data for both hands. */
+  --li-hand-l: #B4441F;
+  --li-hand-r: #1B3FA8;
+
+  /* Ordinal ramp — tone, not hue. Only the worst state is an
+     alarm; the best state gets the voice; the middle is silent. */
+  --li-ord-5: #1B3FA8;
+  --li-ord-4: #97A0BE;
+  --li-ord-3: #CBC7BB;
+  --li-ord-2: #CFA894;
+  --li-ord-1: #B4441F;
+
+  /* ---- Type ---- */
+  --font-display: 'LI Display', ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'LI Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ---- Metrics. 8px base; hairline everywhere. ---- */
+  --hair: 1px;
+  --r: 3px;                  /* plates            */
+  --r-s: 2px;                /* controls          */
+  --tabbar-h: 60px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --tabbar-h: 58px;
-  --shadow-card: 0 4px 0 var(--dc-line);
-  --shadow-sheet: 0 -16px 48px rgba(46,46,66,0.16);
+
+  /* ---- Legacy variable names, remapped so any code still
+          referencing them lands on Latent Instrument values.
+          Also keeps the --dc-* names alive for the chart layers
+          and any markup built before the redesign. ---- */
+  --dc-bg: var(--li-bg);
+  --dc-surface: var(--li-surface);
+  --dc-ink: var(--li-ink);
+  --dc-ink-sub: var(--li-ink-2);
+  --dc-ink-faint: var(--li-ink-3);
+  --dc-line: var(--li-line);
+  --dc-line-soft: var(--li-line-2);
+  --dc-grid: var(--li-grid);
+  --dc-blue: var(--li-signal);
+  --dc-blue-deep: var(--li-signal-deep);
+  --dc-blue-tint: var(--li-signal-tint);
+  --dc-blue-muted: var(--li-signal-mute);
+  --dc-blue-shadow: var(--li-line);
+  --dc-green: var(--li-ink);
+  --dc-green-deep: var(--li-ink);
+  --dc-green-tint: var(--li-panel);
+  --dc-amber: var(--li-oxide);
+  --dc-amber-text: var(--li-oxide-deep);
+  --dc-amber-tint: var(--li-oxide-tint);
+  --dc-amber-border: var(--li-oxide-mute);
+  --dc-amber-shadow: var(--li-oxide-mute);
+  --dc-amber-fine: var(--li-ink-3);
+  --dc-red: var(--li-oxide);
+  --dc-red-deep: var(--li-oxide-deep);
+  --dc-red-tint: var(--li-oxide-tint);
+  --dc-purple: var(--li-ink-2);
+  --dc-rec-5: var(--li-ord-5);
+  --dc-rec-4: var(--li-ord-4);
+  --dc-rec-3: var(--li-ord-3);
+  --dc-rec-2: var(--li-ord-2);
+  --dc-rec-1: var(--li-ord-1);
+  --dc-series-secondary: var(--li-line);
+  --dc-bar-neutral: var(--li-panel);
+
+  --bg: var(--li-bg);
+  --bg2: var(--li-surface);
+  --card: var(--li-surface);
+  --card-hover: var(--li-panel-2);
+  --card-border: var(--li-line);
+  --card-border-bright: var(--li-line);
+  --accent: var(--li-signal);
+  --accent-end: var(--li-signal);
+  --accent-glow: rgba(27,63,168,0.16);
+  --danger: var(--li-oxide);
+  --success: var(--li-signal);
+  --warn: var(--li-oxide);
+  --text: var(--li-ink);
+  --text-dim: var(--li-ink-2);
+  --text-dimmer: var(--li-ink-3);
+  --radius: var(--r);
+  --shadow-card: none;
+  --shadow-sheet: none;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
 html, body {
   margin: 0; padding: 0;
-  background: var(--dc-bg);
-  color: var(--dc-ink);
-  font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 16px; line-height: 1.4; -webkit-font-smoothing: antialiased;
+  background: var(--li-bg);
+  color: var(--li-ink);
+  font-family: var(--font-mono);
+  font-size: 12.5px; line-height: 1.6;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   overscroll-behavior-y: none;
+  font-variant-numeric: tabular-nums;
 }
 body { min-height: 100vh; }
 
 #view {
-  padding: calc(var(--safe-top) + 14px) 16px calc(var(--tabbar-h) + var(--safe-bottom) + 28px);
+  padding: calc(var(--safe-top) + 16px) 16px calc(var(--tabbar-h) + var(--safe-bottom) + 32px);
   max-width: 640px; margin: 0 auto;
 }
 
-/* ---- Type scale ---- */
-h1 { font-size: 24px; font-weight: 800; margin: 4px 0 2px; letter-spacing: -0.4px; }
-h2 { font-size: 16px; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.2px; }
-/* Section headers directly in the view read as micro-labels */
-#view > h2 {
-  font-size: 11px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.8px; color: var(--dc-ink-faint);
-  margin: 20px 0 8px 4px;
+/* ============================================================
+   TYPE — two registers, nothing between them.
+   Display (Jura Light) is never set below 18px; the whisper
+   (Geist Mono) is never set above 13px.
+   ============================================================ */
+
+h1 {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 300;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  margin: 4px 0 2px; color: var(--li-ink);
 }
-.sub { color: var(--dc-ink-sub); font-size: 13px; font-weight: 600; margin: 0 0 4px; }
-.muted { color: var(--dc-ink-sub); font-size: 12px; font-weight: 600; }
-.micro {
-  font-size: 11px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.8px; color: var(--dc-ink-faint);
-}
-.hint { font-size: 10.5px; font-weight: 600; color: var(--dc-ink-faint); }
-.big-kg {
-  font-size: 40px; font-weight: 800; letter-spacing: -1px; line-height: 1;
-  font-variant-numeric: tabular-nums;
+h2 {
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: 300; letter-spacing: 0.03em;
+  margin: 0 0 10px; color: var(--li-ink);
 }
 
-/* ---- Cards ---- */
-.card {
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  border-radius: 20px;
-  padding: 16px 14px; margin: 10px 0;
-  box-shadow: 0 4px 0 var(--dc-line);
+/* Section headers in the view are plate heads: a whispered label
+   with a hairline running out to the measure, exactly as in the
+   book. This is the single most recognisable device in the app. */
+#view > h2 {
+  font-family: var(--font-mono);
+  font-size: 9.5px; font-weight: 400; text-transform: uppercase;
+  letter-spacing: 0.2em; color: var(--li-ink-3);
+  margin: 26px 0 10px; display: flex; align-items: center; gap: 10px;
 }
-.card.tight { padding: 12px 14px; }
-.card.highlight { border-color: var(--dc-blue); box-shadow: 0 4px 0 var(--dc-blue-shadow); }
+#view > h2::after {
+  content: ''; flex: 1; height: var(--hair);
+  background: var(--li-line); align-self: center;
+}
+
+.sub { color: var(--li-ink-2); font-size: 11.5px; font-weight: 400; margin: 0 0 4px; }
+.muted { color: var(--li-ink-2); font-size: 11px; font-weight: 400; }
+.micro {
+  font-size: 9.5px; font-weight: 400; text-transform: uppercase;
+  letter-spacing: 0.18em; color: var(--li-ink-3);
+}
+.hint { font-size: 10px; font-weight: 400; color: var(--li-ink-3); line-height: 1.55; }
+
+.big-kg {
+  font-family: var(--font-display);
+  font-size: 40px; font-weight: 300; letter-spacing: 0.01em; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--li-ink);
+}
+
+b, strong { font-weight: 700; }
+
+/* ============================================================
+   PLATES (cards) — bone on a deeper bone, hairline, no shadow.
+   ============================================================ */
+
+.card {
+  background: var(--li-surface);
+  border: var(--hair) solid var(--li-line);
+  border-radius: var(--r);
+  padding: 15px 14px; margin: 10px 0;
+  box-shadow: none;
+}
+.card.tight { padding: 11px 14px; }
+
+/* The highlighted plate is not louder — it is registered. A 2px
+   signal rule down its leading edge, nothing else. */
+.card.highlight {
+  border-color: var(--li-line);
+  box-shadow: inset 2px 0 0 0 var(--li-signal);
+}
 
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
-/* ---- Pills / tint chips ---- */
-.pill {
-  display: inline-block; padding: 4px 10px; border-radius: 999px;
-  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
-  background: #F2F2F7; color: var(--dc-ink-sub); margin-right: 6px;
-}
-.pill.accent { background: var(--dc-blue-tint); color: var(--dc-blue-deep); }
-.tint-chip {
-  display: inline-block; padding: 4px 10px; border-radius: 999px;
-  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.tint-chip.green { background: var(--dc-green-tint); color: var(--dc-green-deep); }
-.tint-chip.amber { background: var(--dc-amber-tint); color: var(--dc-amber-text); }
-.tint-chip.blue  { background: var(--dc-blue-tint);  color: var(--dc-blue-deep); }
+/* ============================================================
+   TAGS — square, hairline, whispered.
+   ============================================================ */
 
-/* ---- Buttons: solid fill + darker 3D edge, sink on press ---- */
+.pill {
+  display: inline-block; padding: 3px 8px; border-radius: var(--r-s);
+  font-family: var(--font-mono);
+  font-size: 9.5px; font-weight: 400; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  background: transparent; border: var(--hair) solid var(--li-line);
+  color: var(--li-ink-2); margin-right: 6px;
+}
+.pill.accent {
+  background: var(--li-signal-tint);
+  border-color: var(--li-signal-mute);
+  color: var(--li-signal-deep);
+}
+
+.tint-chip {
+  display: inline-block; padding: 3px 8px; border-radius: var(--r-s);
+  font-size: 9.5px; font-weight: 400; letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+  border: var(--hair) solid transparent;
+}
+/* .green is the affirmed/neutral state — ink, not a second hue */
+.tint-chip.green { background: var(--li-panel); border-color: var(--li-line); color: var(--li-ink); }
+.tint-chip.amber { background: var(--li-oxide-tint); border-color: var(--li-oxide-mute); color: var(--li-oxide-deep); }
+.tint-chip.blue  { background: var(--li-signal-tint); border-color: var(--li-signal-mute); color: var(--li-signal-deep); }
+
+/* ============================================================
+   BUTTONS — flat fills, hairline edges, no 3D. Press darkens.
+   ============================================================ */
+
 button, .tab, .btn, .chip, .list-item { touch-action: manipulation; }
-button { font-family: inherit; color: var(--dc-ink); }
+button { font-family: var(--font-mono); color: var(--li-ink); }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  min-height: 52px; padding: 0 20px; border-radius: 16px; border: none;
-  background: var(--dc-blue);
-  color: #fff; font-size: 15px; font-weight: 800;
-  letter-spacing: 0.6px; text-transform: uppercase;
-  width: 100%; cursor: pointer; margin-top: 4px;
-  box-shadow: 0 5px 0 var(--dc-blue-deep);
+  min-height: 50px; padding: 0 20px;
+  border-radius: var(--r-s);
+  border: var(--hair) solid var(--li-signal);
+  background: var(--li-signal);
+  color: var(--li-surface);
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 400;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  width: 100%; cursor: pointer; margin-top: 6px;
+  box-shadow: none;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
-.btn.start { background: var(--dc-green); box-shadow: 0 5px 0 var(--dc-green-deep); }
-.btn.danger { background: var(--dc-red); box-shadow: 0 5px 0 var(--dc-red-deep); }
+.btn:active { background: var(--li-signal-deep); border-color: var(--li-signal-deep); }
+
+/* START is the same voice as everything else. There is no
+   celebratory colour in this system. */
+.btn.start { background: var(--li-signal); border-color: var(--li-signal); }
+.btn.start:active { background: var(--li-signal-deep); border-color: var(--li-signal-deep); }
+
+.btn.danger { background: var(--li-oxide); border-color: var(--li-oxide); }
+.btn.danger:active { background: var(--li-oxide-deep); border-color: var(--li-oxide-deep); }
+
 .btn.secondary {
-  background: var(--dc-surface);
-  color: var(--dc-blue);
-  border: 2px solid var(--dc-line);
-  box-shadow: 0 4px 0 var(--dc-line);
-  min-height: 46px; font-size: 12px;
+  background: transparent;
+  color: var(--li-ink);
+  border: var(--hair) solid var(--li-line);
+  min-height: 44px; font-size: 10px;
 }
+.btn.secondary:active { background: var(--li-panel); border-color: var(--li-ink-3); }
+
 .btn.ghost {
   background: transparent;
-  border: 2px solid var(--dc-line);
-  box-shadow: none;
-  color: var(--dc-ink-sub);
-  min-height: 44px; font-size: 12px;
+  border: var(--hair) solid var(--li-line-2);
+  color: var(--li-ink-2);
+  min-height: 42px; font-size: 10px;
 }
-.btn.small { min-height: 38px; font-size: 11px; width: auto; padding: 0 14px; border-radius: 12px; box-shadow: 0 3px 0 var(--dc-blue-deep); }
-.btn.small.secondary, .btn.small.ghost { box-shadow: 0 3px 0 var(--dc-line); }
-.btn.small.ghost { box-shadow: none; }
-.btn[disabled] { opacity: 0.4; }
+.btn.ghost:active { background: var(--li-panel-2); }
+
+.btn.small {
+  min-height: 34px; font-size: 9.5px; width: auto;
+  padding: 0 13px; border-radius: var(--r-s);
+}
+.btn[disabled] { opacity: 0.35; }
 
 .textbtn {
   border: none; background: none; cursor: pointer; padding: 4px 0;
-  font-size: 13px; font-weight: 800; color: var(--dc-blue);
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 400; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--li-signal);
 }
-.textbtn:active { opacity: 0.6; }
+.textbtn:active { color: var(--li-signal-deep); }
 
-/* ---- Callouts / Banners ---- */
+/* ============================================================
+   CALLOUTS / BANNERS — a tinted field with a hairline. The
+   warn/danger marker is a small square, never an icon.
+   ============================================================ */
+
 .callout {
-  background: var(--dc-blue-tint);
-  border-radius: 14px;
-  padding: 11px 13px;
-  font-size: 12px; font-weight: 600; line-height: 1.55;
-  color: var(--dc-ink); margin: 10px 0;
+  background: var(--li-signal-tint);
+  border: var(--hair) solid var(--li-signal-mute);
+  border-radius: var(--r-s);
+  padding: 11px 12px;
+  font-size: 11.5px; font-weight: 400; line-height: 1.6;
+  color: var(--li-ink); margin: 10px 0;
 }
-.callout b, .callout strong { color: var(--dc-blue-deep); font-weight: 800; }
-.banner { border-radius: 16px; padding: 11px 13px; margin: 10px 0; font-size: 12px; font-weight: 600; line-height: 1.5; }
+.callout b, .callout strong { color: var(--li-signal-deep); font-weight: 700; }
+
+.banner {
+  border-radius: var(--r-s); padding: 11px 12px; margin: 10px 0;
+  font-size: 11.5px; font-weight: 400; line-height: 1.6;
+}
 .banner.warn {
-  background: var(--dc-amber-tint);
-  border: 2px solid var(--dc-amber-border);
-  color: var(--dc-ink);
+  background: var(--li-oxide-tint);
+  border: var(--hair) solid var(--li-oxide-mute);
+  color: var(--li-ink);
   display: flex; align-items: flex-start; gap: 10px;
 }
 .banner.warn::before {
-  content: ''; width: 8px; height: 8px; border-radius: 999px;
-  background: var(--dc-amber); margin-top: 5px; flex: none;
+  content: ''; width: 6px; height: 6px; border-radius: 0;
+  background: var(--li-oxide); margin-top: 6px; flex: none;
 }
-.banner.warn b, .banner.warn strong { color: var(--dc-amber-text); font-weight: 800; }
-.banner.warn .fine { color: var(--dc-amber-fine); font-weight: 500; }
+.banner.warn b, .banner.warn strong { color: var(--li-oxide-deep); font-weight: 700; }
+.banner.warn .fine { color: var(--li-ink-3); font-weight: 400; }
 .banner.danger {
-  background: var(--dc-red-tint);
-  border: 2px solid #F6C7C7;
-  color: var(--dc-ink);
+  background: var(--li-oxide-tint);
+  border: var(--hair) solid var(--li-oxide);
+  color: var(--li-ink);
 }
 
-/* ---- Steppers + Rating + Fields ---- */
+/* ============================================================
+   STEPPERS · RATINGS · FIELDS
+   ============================================================ */
+
 .stepper { display: inline-flex; align-items: center; gap: 0; }
 .stepper button {
-  width: 46px; height: 46px; font-size: 22px; font-weight: 800; border-radius: 13px;
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  box-shadow: 0 3px 0 var(--dc-line);
-  color: var(--dc-blue);
+  width: 44px; height: 44px;
+  font-family: var(--font-mono);
+  font-size: 15px; font-weight: 400;
+  border-radius: var(--r-s);
+  background: transparent;
+  border: var(--hair) solid var(--li-line);
+  color: var(--li-signal);
 }
+.stepper button:active { background: var(--li-panel); }
 .stepper .val {
-  min-width: 78px; text-align: center; font-size: 24px; font-weight: 800;
-  letter-spacing: -0.5px; font-variant-numeric: tabular-nums;
+  min-width: 82px; text-align: center;
+  font-family: var(--font-display);
+  font-size: 26px; font-weight: 300; letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 .field { margin: 14px 0; }
 .field label {
-  display: block; font-size: 11px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.8px; color: var(--dc-ink-faint); margin-bottom: 7px;
+  display: block; font-size: 9.5px; font-weight: 400; text-transform: uppercase;
+  letter-spacing: 0.18em; color: var(--li-ink-3); margin-bottom: 7px;
 }
 .field input, .field select, .field textarea, .input {
   display: block; width: 100%; min-width: 0; box-sizing: border-box;
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  color: var(--dc-ink); border-radius: 12px; padding: 11px 13px;
-  font-size: 16px; font-weight: 600; font-family: inherit;
-  transition: border-color 0.15s ease;
+  background: var(--li-panel-2);
+  border: var(--hair) solid var(--li-line);
+  color: var(--li-ink); border-radius: var(--r-s); padding: 11px 12px;
+  font-size: 16px; font-weight: 400; font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 .field input:focus, .field select:focus, .field textarea:focus, .input:focus {
   outline: none;
-  border-color: var(--dc-blue);
+  border-color: var(--li-signal);
+  background: var(--li-surface);
 }
-.field textarea { min-height: 64px; resize: vertical; }
+.field textarea { min-height: 64px; resize: vertical; line-height: 1.6; }
 
 input[type="date"] {
   display: block; width: 100%; min-width: 0; box-sizing: border-box; min-height: 46px;
 }
 input[type="date"]::-webkit-date-and-time-value { min-height: 1.4em; }
 
-.rate { display: flex; gap: 8px; flex-wrap: wrap; }
+.rate { display: flex; gap: 6px; flex-wrap: wrap; }
 .rate button {
-  flex: 1; min-width: 44px; min-height: 48px; border-radius: 13px;
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  box-shadow: 0 3px 0 var(--dc-line);
-  font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums;
-  color: var(--dc-ink-sub);
+  flex: 1; min-width: 42px; min-height: 46px; border-radius: var(--r-s);
+  background: transparent;
+  border: var(--hair) solid var(--li-line);
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: 300; font-variant-numeric: tabular-nums;
+  color: var(--li-ink-2);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 .rate button.sel {
-  background: var(--dc-blue);
-  border-color: var(--dc-blue-deep);
-  box-shadow: 0 3px 0 var(--dc-blue-deep);
-  color: #fff;
+  background: var(--li-signal);
+  border-color: var(--li-signal);
+  color: var(--li-surface);
 }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-/* ---- Chips (filters) ---- */
-.chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; }
+/* ============================================================
+   CHIPS · SEGMENTED — registers, not pills.
+   ============================================================ */
+
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 4px; }
 .chip {
-  padding: 7px 15px; border-radius: 999px;
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  box-shadow: 0 3px 0 var(--dc-line);
-  font-size: 11px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;
-  color: var(--dc-ink-sub);
+  padding: 7px 12px; border-radius: var(--r-s);
+  background: transparent;
+  border: var(--hair) solid var(--li-line);
+  font-family: var(--font-mono);
+  font-size: 9.5px; font-weight: 400; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--li-ink-2);
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 .chip.sel {
-  background: var(--dc-blue);
-  border-color: var(--dc-blue-deep);
-  box-shadow: 0 3px 0 var(--dc-blue-deep);
-  color: #fff;
+  background: var(--li-signal);
+  border-color: var(--li-signal);
+  color: var(--li-surface);
 }
 
-/* ---- Segmented control ---- */
 .seg {
-  display: flex; padding: 3px;
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  border-radius: 999px;
+  display: flex; padding: 2px;
+  background: transparent;
+  border: var(--hair) solid var(--li-line);
+  border-radius: var(--r-s);
 }
 .seg button {
-  border: none; cursor: pointer; padding: 6px 14px; border-radius: 999px;
-  font-size: 11px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;
-  background: transparent; color: var(--dc-ink-sub);
+  border: none; cursor: pointer; padding: 7px 13px; border-radius: 1px;
+  font-family: var(--font-mono);
+  font-size: 9.5px; font-weight: 400; letter-spacing: 0.16em; text-transform: uppercase;
+  background: transparent; color: var(--li-ink-2);
   transition: background 0.15s ease, color 0.15s ease;
 }
-.seg button:active { transform: scale(0.96); }
-.seg button.sel { background: var(--dc-blue); color: #fff; }
+.seg button.sel { background: var(--li-signal); color: var(--li-surface); }
 
-/* ---- Tab bar: labels + dot (per mock) ---- */
+/* ============================================================
+   TAB BAR — labels and a square register mark.
+   ============================================================ */
+
 #tabbar {
   position: fixed; bottom: 0; left: 0; right: 0;
-  padding: 12px 10px calc(var(--safe-bottom) + 8px);
+  padding: 11px 8px calc(var(--safe-bottom) + 9px);
   display: flex;
-  background: var(--dc-surface);
-  border-top: 2px solid var(--dc-grid);
+  background: var(--li-surface);
+  border-top: var(--hair) solid var(--li-line);
   z-index: 50;
 }
 #tabbar .tab {
   flex: 1; background: none; border: none;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 5px; cursor: pointer;
-  font-size: 10px; font-weight: 800; letter-spacing: 0.7px; text-transform: uppercase;
-  color: var(--dc-ink-faint);
-  transition: transform 0.12s ease, color 0.15s ease;
+  gap: 6px; cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 8.5px; font-weight: 400; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--li-ink-3);
+  transition: color 0.15s ease;
 }
-#tabbar .tab:active { transform: scale(0.92); }
-#tabbar .tab .dot { width: 5px; height: 5px; border-radius: 999px; background: transparent; }
-#tabbar .tab.sel { color: var(--dc-blue); }
-#tabbar .tab.sel .dot { background: var(--dc-blue); }
+#tabbar .tab .dot {
+  width: 4px; height: 4px; border-radius: 0; background: transparent;
+}
+#tabbar .tab.sel { color: var(--li-ink); }
+#tabbar .tab.sel .dot { background: var(--li-signal); }
 
-/* ---- Analytics: hero E1RM card ---- */
-.hero-readout { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 10px; }
+/* ============================================================
+   ANALYTICS — hero readout
+   ============================================================ */
+
+.hero-readout { display: flex; align-items: baseline; gap: 7px; margin: 8px 0 12px; }
 .hero-num {
-  font-size: 40px; font-weight: 800; letter-spacing: -1px; line-height: 1;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display);
+  font-size: 46px; font-weight: 300; letter-spacing: 0.01em; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--li-ink);
 }
-.hero-unit { font-size: 16px; font-weight: 700; color: var(--dc-ink-sub); }
+.hero-unit {
+  font-size: 10px; font-weight: 400; color: var(--li-ink-3);
+  letter-spacing: 0.18em; text-transform: uppercase;
+}
 .hero-side {
-  margin-left: auto; font-size: 12px; font-weight: 600; color: var(--dc-ink-sub);
-  font-variant-numeric: tabular-nums;
+  margin-left: auto; font-size: 10px; font-weight: 400; color: var(--li-ink-2);
+  letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
 }
 .chart-caps {
-  display: flex; justify-content: space-between; margin-top: 6px;
-  font-size: 10px; font-weight: 600; color: var(--dc-ink-faint);
+  display: flex; justify-content: space-between; margin-top: 8px;
+  font-size: 9px; font-weight: 400; color: var(--li-ink-3);
+  letter-spacing: 0.12em; text-transform: uppercase;
   font-variant-numeric: tabular-nums;
 }
-.chart-caps .amber { color: var(--dc-amber-text); }
+.chart-caps .amber { color: var(--li-ink-2); }
 
-/* ---- Analytics: stat strip ---- */
+/* ---- stat strip: three readings on one plate ---- */
 .stat-strip {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  border-radius: 20px; box-shadow: 0 4px 0 var(--dc-line);
+  background: var(--li-surface);
+  border: var(--hair) solid var(--li-line);
+  border-radius: var(--r);
   padding: 12px 0; margin: 10px 0;
 }
-.ss-col { padding: 2px 14px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.ss-col + .ss-col { border-left: 2px solid var(--dc-line-soft); }
+.ss-col { padding: 2px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ss-col + .ss-col { border-left: var(--hair) solid var(--li-line-2); }
 .ss-label {
-  font-size: 10px; font-weight: 800; text-transform: uppercase;
-  letter-spacing: 0.7px; color: var(--dc-ink-faint); white-space: nowrap;
+  font-size: 8.5px; font-weight: 400; text-transform: uppercase;
+  letter-spacing: 0.16em; color: var(--li-ink-3); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
 }
-.ss-value { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ss-value small { font-size: 11px; font-weight: 700; color: var(--dc-ink-sub); }
-.ss-sub { font-size: 10.5px; font-weight: 600; color: var(--dc-ink-sub); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ss-sub.pos { color: var(--dc-green-deep); font-weight: 700; }
+.ss-value {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 300; line-height: 1.1;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ss-value small {
+  font-family: var(--font-mono);
+  font-size: 9px; font-weight: 400; color: var(--li-ink-3);
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
+.ss-sub {
+  font-size: 9.5px; font-weight: 400; color: var(--li-ink-2);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ss-sub.pos { color: var(--li-signal-deep); }
 
-/* ---- Analytics: fatigue card ---- */
-.rec-cells { display: flex; gap: 5px; margin: 12px 0 6px; }
-.rec-cell { flex: 1; height: 20px; border-radius: 6px; background: var(--dc-line-soft); }
-.card-divider { height: 2px; background: var(--dc-line-soft); border-radius: 2px; margin: 12px 0; }
-.vol-bars { display: flex; align-items: flex-end; gap: 6px; height: 84px; margin-top: 12px; }
-.vol-bar { flex: 1; border-radius: 6px 6px 2px 2px; background: var(--dc-blue-muted); }
-.vol-bar.cur { background: var(--dc-blue); }
+/* ---- fatigue / volume ---- */
+.rec-cells { display: flex; gap: 4px; margin: 12px 0 6px; }
+.rec-cell { flex: 1; height: 16px; border-radius: 1px; background: #DCD8CD; }
+.card-divider { height: var(--hair); background: var(--li-line-2); border-radius: 0; margin: 13px 0; }
+.vol-bars { display: flex; align-items: flex-end; gap: 5px; height: 78px; margin-top: 12px; }
+.vol-bar { flex: 1; border-radius: 1px; background: #D2CEC2; }
+.vol-bar.cur { background: var(--li-signal); }
 .axis-caps {
-  display: flex; justify-content: space-between; margin-top: 5px;
-  font-size: 9.5px; font-weight: 600; color: var(--dc-ink-faint);
-  font-variant-numeric: tabular-nums;
+  display: flex; justify-content: space-between; margin-top: 6px;
+  font-size: 8.5px; font-weight: 400; color: var(--li-ink-3);
+  letter-spacing: 0.1em; font-variant-numeric: tabular-nums;
 }
-.card-title { font-size: 14px; font-weight: 700; }
-.card-title .soft { font-weight: 500; color: var(--dc-ink-faint); }
-.card-note { margin: 10px 0 0; font-size: 10.5px; font-weight: 500; color: var(--dc-ink-faint); }
+.card-title {
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 400; text-transform: uppercase;
+  letter-spacing: 0.18em; color: var(--li-ink);
+}
+.card-title .soft { color: var(--li-ink-3); letter-spacing: 0.14em; }
+/* A <span class="card-title"> is a label and is set in capitals.
+   A <p class="card-title"> is the card's verdict — a real sentence,
+   and sentences are never shouted. */
+p.card-title {
+  text-transform: none; letter-spacing: 0.01em;
+  font-weight: 400; line-height: 1.6; color: var(--li-ink);
+}
+p.card-title b, p.card-title strong { font-weight: 700; }
+.card-note {
+  margin: 11px 0 0; font-size: 9.5px; font-weight: 400;
+  line-height: 1.65; color: var(--li-ink-3);
+}
 
-/* ---- Analytics: RPE distribution ---- */
-.rpe-row { display: flex; gap: 8px; margin-top: 14px; }
+/* ---- RPE distribution ---- */
+.rpe-row { display: flex; gap: 6px; margin-top: 14px; }
 .rpe-col { flex: 1; display: flex; flex-direction: column; align-items: stretch; gap: 6px; min-width: 0; }
-.rpe-barbox { height: 56px; display: flex; align-items: flex-end; }
-.rpe-bar { width: 100%; border-radius: 6px 6px 2px 2px; background: var(--dc-bar-neutral); }
-.rpe-bar.hot { background: var(--dc-blue); }
+.rpe-barbox { height: 52px; display: flex; align-items: flex-end; }
+.rpe-bar { width: 100%; border-radius: 1px; background: #D2CEC2; }
+.rpe-bar.hot { background: var(--li-signal); }
 .rpe-lab {
-  text-align: center; font-size: 9.5px; font-weight: 700; color: var(--dc-ink-faint);
-  font-variant-numeric: tabular-nums;
+  text-align: center; font-size: 8.5px; font-weight: 400; color: var(--li-ink-3);
+  letter-spacing: 0.08em; font-variant-numeric: tabular-nums;
 }
-.rpe-lab.hot { color: var(--dc-blue-deep); }
+.rpe-lab.hot { color: var(--li-signal-deep); }
 
-/* ---- Program: allocation track ---- */
-.alloc-wrap { position: relative; padding-top: 16px; }
-.alloc-track { display: flex; gap: 4px; }
-.alloc-seg { height: 18px; border-radius: 4px; }
-.alloc-seg:first-child { border-radius: 9px 4px 4px 9px; }
-.alloc-seg:last-child { border-radius: 4px 9px 9px 4px; }
-.alloc-tags { display: flex; gap: 4px; margin-top: 6px; }
+/* ============================================================
+   PROGRAM — allocation track
+   ============================================================ */
+
+.alloc-wrap { position: relative; padding-top: 18px; }
+.alloc-track { display: flex; gap: 2px; }
+.alloc-seg { height: 14px; border-radius: 0; }
+.alloc-seg:first-child { border-radius: 1px 0 0 1px; }
+.alloc-seg:last-child { border-radius: 0 1px 1px 0; }
+.alloc-tags { display: flex; gap: 2px; margin-top: 7px; }
 .alloc-tag {
-  text-align: center; font-size: 9px; font-weight: 800; letter-spacing: 0.6px;
+  text-align: center; font-size: 8px; font-weight: 400; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--li-ink-3);
   overflow: hidden; white-space: nowrap;
 }
+/* NOW is the only 2px stroke on the page. */
 .alloc-now {
-  position: absolute; top: 2px; bottom: -4px; width: 3px;
-  background: var(--dc-ink); border-radius: 2px; z-index: 2;
+  position: absolute; top: 4px; bottom: -5px; width: 2px;
+  background: var(--li-ink); border-radius: 0; z-index: 2;
 }
 .alloc-now-pill {
-  position: absolute; top: 0; transform: translate(-50%, -6px);
-  font-size: 8.5px; font-weight: 800; letter-spacing: 0.6px; color: #fff;
-  text-transform: uppercase; background: var(--dc-ink);
-  padding: 2px 7px; border-radius: 6px; z-index: 3;
+  position: absolute; top: 0; transform: translate(-50%, -4px);
+  font-size: 8px; font-weight: 400; letter-spacing: 0.16em; color: var(--li-surface);
+  text-transform: uppercase; background: var(--li-ink);
+  padding: 2px 6px; border-radius: 1px; z-index: 3;
 }
 .alloc-dates {
-  display: flex; justify-content: space-between; margin-top: 8px;
-  font-size: 10px; font-weight: 600; color: var(--dc-ink-faint);
-  font-variant-numeric: tabular-nums;
+  display: flex; justify-content: space-between; margin-top: 9px;
+  font-size: 9px; font-weight: 400; color: var(--li-ink-3);
+  letter-spacing: 0.06em; font-variant-numeric: tabular-nums;
 }
-.alloc-dates .amber { color: var(--dc-amber-text); }
+.alloc-dates .amber { color: var(--li-oxide-deep); }
 
-/* ---- Program: stepping-stone week list ---- */
-.wk-row { display: grid; grid-template-columns: 46px 1fr; gap: 12px; }
+/* ---- stepping-stone week list ---- */
+.wk-row { display: grid; grid-template-columns: 44px 1fr; gap: 12px; }
 .wk-col { display: flex; flex-direction: column; align-items: center; }
 .wk-tile {
-  width: 46px; height: 46px; border-radius: 15px;
+  width: 44px; height: 44px; border-radius: var(--r-s);
   display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 800;
-  background: var(--dc-surface); border: 2px solid var(--dc-line);
-  box-shadow: 0 3px 0 var(--dc-line);
-  color: var(--dc-ink-faint); flex: none;
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: 300;
+  background: transparent; border: var(--hair) solid var(--li-line);
+  color: var(--li-ink-3); flex: none;
 }
-.wk-tile.done {
-  background: var(--dc-green); border-color: var(--dc-green-deep);
-  box-shadow: 0 3px 0 var(--dc-green-deep); color: #fff;
-}
-.wk-tile.current {
-  background: var(--dc-blue); border-color: var(--dc-blue-deep);
-  box-shadow: 0 3px 0 var(--dc-blue-deep); color: #fff;
-}
-.wk-tile.test {
-  background: var(--dc-surface); border-color: var(--dc-amber);
-  box-shadow: 0 3px 0 var(--dc-amber); color: var(--dc-amber-text);
-}
-.wk-rail { width: 3px; flex: 1; background: var(--dc-line); border-radius: 2px; margin: 5px 0; min-height: 8px; }
+/* done = recorded, so it is ink. Not a reward colour. */
+.wk-tile.done { background: var(--li-panel); border-color: var(--li-line); color: var(--li-ink); }
+.wk-tile.current { background: var(--li-signal); border-color: var(--li-signal); color: var(--li-surface); }
+.wk-tile.test { background: transparent; border-color: var(--li-oxide); color: var(--li-oxide-deep); }
+.wk-rail { width: var(--hair); flex: 1; background: var(--li-line); border-radius: 0; margin: 6px 0; min-height: 8px; }
+
 .wk-card {
-  margin-bottom: 12px;
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line); border-radius: 18px;
-  box-shadow: 0 4px 0 var(--dc-line);
-  padding: 12px 14px; cursor: pointer;
+  margin-bottom: 10px;
+  background: var(--li-surface);
+  border: var(--hair) solid var(--li-line); border-radius: var(--r);
+  padding: 12px 13px; cursor: pointer;
   text-align: left; width: 100%; display: block;
-  transition: transform 0.12s;
+  transition: background 0.12s ease;
 }
-.wk-card:active { transform: translateY(2px); }
-.wk-card.current { border-color: var(--dc-blue); box-shadow: 0 4px 0 var(--dc-blue-shadow); }
-.wk-card.test { border-color: #F6C445; box-shadow: 0 4px 0 var(--dc-amber-shadow); }
-.wk-title { font-size: 15px; font-weight: 800; }
+.wk-card:active { background: var(--li-panel-2); }
+.wk-card.current { box-shadow: inset 2px 0 0 0 var(--li-signal); }
+.wk-card.test { box-shadow: inset 2px 0 0 0 var(--li-ink-3); }
+.wk-title {
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+}
 .wk-meta {
-  margin: 5px 0 0; font-size: 12px; font-weight: 600; color: var(--dc-ink-sub);
-  font-variant-numeric: tabular-nums;
+  margin: 6px 0 0; font-size: 10px; font-weight: 400; color: var(--li-ink-2);
+  font-variant-numeric: tabular-nums; line-height: 1.6;
 }
 .wk-testnote {
-  margin: 7px 0 0; font-size: 11px; font-weight: 600; line-height: 1.5;
-  color: var(--dc-amber-text);
+  margin: 8px 0 0; font-size: 10px; font-weight: 400; line-height: 1.6;
+  color: var(--li-ink-2);
 }
 .status-chip {
-  font-size: 10px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase;
-  border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+  font-size: 8.5px; font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase;
+  border-radius: var(--r-s); padding: 4px 8px; white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  background: #F2F2F7; color: var(--dc-ink-sub); flex: none;
+  background: transparent; border: var(--hair) solid var(--li-line);
+  color: var(--li-ink-2); flex: none;
 }
-.status-chip.done { background: var(--dc-green-tint); color: var(--dc-green-deep); }
-.status-chip.current { background: var(--dc-blue-tint); color: var(--dc-blue-deep); }
-.status-chip.benchmark { background: var(--dc-amber-tint); color: var(--dc-amber-text); }
+.status-chip.done { background: var(--li-panel); border-color: var(--li-line); color: var(--li-ink); }
+.status-chip.current { background: var(--li-signal-tint); border-color: var(--li-signal-mute); color: var(--li-signal-deep); }
+.status-chip.benchmark { background: var(--li-oxide-tint); border-color: var(--li-oxide-mute); color: var(--li-oxide-deep); }
+
 .wk-detail {
-  margin-top: 11px; border-top: 2px solid var(--dc-line-soft); padding-top: 11px;
+  margin-top: 11px; border-top: var(--hair) solid var(--li-line-2); padding-top: 11px;
   display: flex; flex-direction: column; gap: 9px;
 }
+/* Session marks are square registers, matching the plate ruler. */
 .sess-row { display: flex; align-items: center; gap: 10px; }
-.sess-dot { width: 9px; height: 9px; border-radius: 999px; flex: none; border: 2px solid #D8D8E6; background: transparent; }
-.sess-dot.done { background: var(--dc-green); border-color: var(--dc-green); }
-.sess-dot.missed { background: #D8D8E6; border-color: #D8D8E6; } /* scheduled day passed without a log — neutral, not green */
-.sess-dot.next { border-color: var(--dc-blue); }
-.sess-dot.test { border-color: var(--dc-amber); }
-.sess-day { font-size: 11px; font-weight: 800; color: var(--dc-ink-faint); width: 28px; flex: none; }
-.sess-txt { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.sess-dot {
+  width: 7px; height: 7px; border-radius: 0; flex: none;
+  border: var(--hair) solid var(--li-line); background: transparent;
+}
+.sess-dot.done { background: var(--li-ink); border-color: var(--li-ink); }
+.sess-dot.missed { background: var(--li-line); border-color: var(--li-line); }
+.sess-dot.next { border-color: var(--li-signal); box-shadow: inset 0 0 0 1px var(--li-signal); }
+.sess-dot.test { border-color: var(--li-oxide); box-shadow: inset 0 0 0 1px var(--li-oxide); }
+.sess-day {
+  font-size: 9px; font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--li-ink-3); width: 30px; flex: none;
+}
+.sess-txt { font-size: 10.5px; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--li-ink-2); }
 .collapse-host { height: 0; overflow: hidden; }
 .collapse-host.open { height: auto; }
 
-/* ---- Today: header + session card ---- */
-.brand-header { display: flex; align-items: center; gap: 12px; margin: 4px 0 4px; }
+/* ============================================================
+   TODAY — masthead + anchor readout
+   ============================================================ */
+
+.brand-header {
+  display: flex; align-items: center; gap: 12px;
+  margin: 2px 0 6px; padding-bottom: 12px;
+  border-bottom: var(--hair) solid var(--li-line);
+}
 .brand-logo {
-  width: 46px; height: 46px; border-radius: 14px;
-  border: 2px solid var(--dc-line);
-  box-shadow: 0 3px 0 var(--dc-line);
-  background: var(--dc-surface);
+  width: 42px; height: 42px; border-radius: var(--r-s);
+  border: var(--hair) solid var(--li-line);
+  background: var(--li-surface);
   object-fit: cover;
 }
 .brand-info { display: flex; flex-direction: column; min-width: 0; }
-.brand-info h1 { margin: 0; font-size: 21px; }
-.brand-info .sub { margin: 2px 0 0; font-size: 12.5px; }
+.brand-info h1 { margin: 0; font-size: 20px; letter-spacing: 0.1em; }
+.brand-info .sub {
+  margin: 3px 0 0; font-size: 9.5px;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--li-ink-3);
+}
 
 .sc-meta {
-  margin: 6px 0 0; font-size: 13px; font-weight: 600; color: var(--dc-ink-sub);
-  font-variant-numeric: tabular-nums;
+  margin: 7px 0 0; font-size: 11px; font-weight: 400; color: var(--li-ink-2);
+  font-variant-numeric: tabular-nums; line-height: 1.6;
 }
-.anchor-row { display: flex; align-items: flex-end; justify-content: space-between; margin: 16px 0 14px; }
-.anchor-label { margin: 0 0 4px; }
+.anchor-row {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  margin: 16px 0 14px;
+  padding-bottom: 12px; border-bottom: var(--hair) solid var(--li-line-2);
+}
+.anchor-label { margin: 0 0 5px; }
 .anchor-last {
-  margin: 0; font-size: 11px; font-weight: 600; color: var(--dc-ink-faint);
-  text-align: right; font-variant-numeric: tabular-nums;
+  margin: 0; font-size: 9.5px; font-weight: 400; color: var(--li-ink-3);
+  text-align: right; font-variant-numeric: tabular-nums; line-height: 1.6;
 }
 .rules-line {
-  margin: 10px 0 14px; font-size: 11.5px; font-weight: 500; line-height: 1.5;
-  color: var(--dc-ink-faint);
+  margin: 10px 0 14px; font-size: 10px; font-weight: 400; line-height: 1.7;
+  color: var(--li-ink-3);
 }
 
-/* ---- History list items ---- */
+/* ============================================================
+   HISTORY
+   ============================================================ */
+
 .list-item {
   display: block; width: 100%; text-align: left;
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  border-radius: 16px; padding: 12px 14px; margin: 8px 0;
-  box-shadow: 0 3px 0 var(--dc-line);
-  transition: transform 0.1s;
+  background: var(--li-surface);
+  border: var(--hair) solid var(--li-line);
+  border-radius: var(--r); padding: 11px 13px; margin: 7px 0;
+  transition: background 0.1s;
 }
-.list-item:active { transform: translateY(3px); box-shadow: none; }
-.list-item .li-top { display: flex; justify-content: space-between; gap: 8px; }
-.list-item .li-date { font-weight: 800; font-size: 14px; }
+.list-item:active { background: var(--li-panel-2); }
+.list-item .li-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.list-item .li-date {
+  font-family: var(--font-mono);
+  font-weight: 700; font-size: 10.5px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+}
 
-/* ---- Legacy stat grid (kept for any remaining callers) ---- */
-.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 10px 0 4px; }
+/* ---- legacy stat grid ---- */
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0 4px; }
 .stat {
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  border-radius: 16px; padding: 12px 14px;
-  display: flex; flex-direction: column; gap: 3px;
-  box-shadow: 0 3px 0 var(--dc-line);
+  background: var(--li-surface);
+  border: var(--hair) solid var(--li-line);
+  border-radius: var(--r); padding: 11px 12px;
+  display: flex; flex-direction: column; gap: 4px;
 }
-.stat-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; color: var(--dc-ink-faint); }
-.stat-value { font-size: 18px; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.stat-sub { font-size: 10.5px; font-weight: 600; color: var(--dc-ink-sub); }
+.stat-label {
+  font-size: 8.5px; font-weight: 400; text-transform: uppercase;
+  letter-spacing: 0.16em; color: var(--li-ink-3);
+}
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 300; line-height: 1.1; font-variant-numeric: tabular-nums;
+}
+.stat-sub { font-size: 9.5px; font-weight: 400; color: var(--li-ink-2); }
 @media (min-width: 520px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
 
-/* ---- Tables ---- */
-table.prev { width: 100%; border-collapse: collapse; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* ============================================================
+   TABLES — ruled, never boxed.
+   ============================================================ */
+
+table.prev {
+  width: 100%; border-collapse: collapse;
+  font-size: 10.5px; font-weight: 400; font-variant-numeric: tabular-nums;
+}
 table.prev th, table.prev td {
-  padding: 8px 6px; text-align: right;
-  border-bottom: 2px solid var(--dc-line-soft);
+  padding: 8px 5px; text-align: right;
+  border-bottom: var(--hair) solid var(--li-line-2);
 }
 table.prev tr:last-child td { border-bottom: none; }
 table.prev th:first-child, table.prev td:first-child,
 table.prev th:nth-child(2), table.prev td:nth-child(2) { text-align: left; }
 table.prev th {
-  color: var(--dc-ink-faint); font-weight: 800; font-size: 10px;
-  text-transform: uppercase; letter-spacing: 0.7px;
+  color: var(--li-ink-3); font-weight: 400; font-size: 8.5px;
+  text-transform: uppercase; letter-spacing: 0.16em;
+  border-bottom-color: var(--li-line);
 }
-.wmneed { color: var(--dc-red); }
+table.prev td { color: var(--li-ink-2); }
+.wmneed { color: var(--li-oxide); }
 
-/* ---- Modal / Sheet ---- */
+/* ============================================================
+   SHEETS
+   ============================================================ */
+
 #modal-host:empty { display: none; }
 .sheet-overlay {
   position: fixed; inset: 0;
-  background: rgba(46,46,66,0.42);
+  background: rgba(27,29,33,0.34);
   z-index: 300; display: flex; align-items: flex-end;
 }
 .sheet {
   position: relative;
-  background: var(--dc-surface);
+  background: var(--li-surface);
   width: 100%; max-width: 640px; margin: 0 auto;
-  border-radius: 26px 26px 0 0; max-height: 92dvh; overflow-y: auto;
-  padding: 18px 16px calc(var(--safe-bottom) + 28px);
-  border: 2px solid var(--dc-line);
+  border-radius: var(--r) var(--r) 0 0; max-height: 92dvh; overflow-y: auto;
+  padding: 16px 16px calc(var(--safe-bottom) + 28px);
+  border: var(--hair) solid var(--li-line);
   border-bottom: none;
-  box-shadow: var(--shadow-sheet);
+  box-shadow: none;
   animation: slideup 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .sheet::before {
   content: '';
   display: block;
-  width: 36px; height: 5px;
-  background: var(--dc-line);
-  border-radius: 999px;
-  margin: 0 auto 14px;
+  width: 28px; height: 2px;
+  background: var(--li-line);
+  border-radius: 0;
+  margin: 2px auto 16px;
 }
 @keyframes slideup { from { transform: translateY(100%); opacity: 0.5; } to { transform: translateY(0); opacity: 1; } }
-.sheet h2 { margin-top: 6px; font-size: 18px; }
+.sheet h2 {
+  margin-top: 4px; font-size: 18px;
+  padding-bottom: 10px; border-bottom: var(--hair) solid var(--li-line-2);
+}
 .sheet-close {
-  position: absolute; top: 16px; right: 16px;
-  width: 30px; height: 30px;
-  background: #F2F2F7;
-  border: none;
-  border-radius: 50%;
-  font-size: 16px; font-weight: 800; color: var(--dc-ink-sub);
+  position: absolute; top: 14px; right: 14px;
+  width: 28px; height: 28px;
+  background: transparent;
+  border: var(--hair) solid var(--li-line);
+  border-radius: var(--r-s);
+  font-size: 13px; font-weight: 400; color: var(--li-ink-2);
   display: flex; align-items: center; justify-content: center;
   line-height: 1;
 }
+.sheet-close:active { background: var(--li-panel); }
 
-/* ---- Full-screen Runner (kept dark: focused training environment) ---- */
+/* ============================================================
+   RUNNER — the instrument's reading mode.
+   Graphite ground, bone type, the countdown as the one huge
+   thin numeral. Hang and rest are told apart by the state of a
+   single mark, not by a change of hue.
+   ============================================================ */
+
 .runner {
+  --r-ground: #14161A;
+  --r-ink: #EDEAE2;
+  --r-dim: #9A9DA4;
+  --r-faint: #84878E;
+  --r-line: #2C2F35;
+  --r-signal: #6E8DE8;
+  --r-alarm: #D2724D;
+  --r-hand-l: #D2724D;
+  --r-hand-r: #6E8DE8;
+
   position: fixed; inset: 0;
-  background: #07070f;
-  color: #eeeef5;
+  background: var(--r-ground);
+  color: var(--r-ink);
   z-index: 200; display: flex; flex-direction: column;
-  padding: calc(var(--safe-top) + 14px) 20px calc(var(--safe-bottom) + 20px);
+  padding: calc(var(--safe-top) + 16px) 20px calc(var(--safe-bottom) + 20px);
   height: 100dvh;
+  font-family: var(--font-mono);
+  transition: background 0.35s ease;
 }
 .runner .r-head {
   display: flex; justify-content: space-between; align-items: center;
-  color: #8888a0; font-size: 14px; font-weight: 600;
+  color: var(--r-dim);
+  font-size: 9.5px; font-weight: 400;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  padding-bottom: 11px; border-bottom: var(--hair) solid var(--r-line);
+  gap: 10px;
+}
+.runner .r-head > span:first-child {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .runner .r-body {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center; gap: 8px;
+  text-align: center; gap: 10px;
 }
 .runner .countdown {
-  font-size: 30vw; font-weight: 800; line-height: 0.9;
-  letter-spacing: -4px; color: #ffffff;
+  font-family: var(--font-display);
+  font-size: 34vw; font-weight: 300; line-height: 0.92;
+  letter-spacing: 0.02em; color: var(--r-ink);
   font-variant-numeric: tabular-nums;
 }
-.runner .countdown.rest { font-size: 22vw; color: #5b8ff9; }
+.runner .countdown.rest { font-size: 24vw; color: var(--r-signal); }
 .runner .phase {
-  font-size: 13px; color: #55556a; text-transform: uppercase;
-  letter-spacing: 3px; font-weight: 800; margin-top: 4px;
+  font-size: 9.5px; color: var(--r-faint); text-transform: uppercase;
+  letter-spacing: 0.34em; font-weight: 400; margin-top: 6px;
 }
-.runner .r-foot { display: flex; flex-direction: column; gap: 10px; }
-.runner .hangcue { color: #4ecb71; font-size: 22px; font-weight: 800; }
-.runner.is-hang { background: #060f08; }
-.runner.is-rest { background: #060812; }
+.runner .r-foot {
+  display: flex; flex-direction: column; gap: 9px;
+  padding-top: 12px; border-top: var(--hair) solid var(--r-line);
+}
+/* The one named thing on a prep screen sits in the display register,
+   like the reading on a gauge. */
+.runner .r-title {
+  font-family: var(--font-display);
+  font-size: 30px; font-weight: 300;
+  letter-spacing: 0.09em; text-transform: uppercase;
+  margin: 16px 0; color: var(--r-ink);
+}
+.runner .hangcue {
+  font-family: var(--font-display);
+  color: var(--r-ink); font-size: 26px; font-weight: 300;
+  letter-spacing: 0.14em; text-transform: uppercase;
+}
 
-/* Which hand is working, on every runner screen. Left and right get
-   different colours as well as different text: on a session where the two
-   alternate 16+ times, reading a word is slower than reading a colour, and
-   mixing them up silently mislabels that day's data for both hands. */
+/* State is carried by a hairline register at the top of the
+   plate, not by tinting the whole ground. */
+.runner.is-hang { background: #12161A; box-shadow: inset 0 3px 0 0 var(--r-ink); }
+.runner.is-rest { background: #131519; box-shadow: inset 0 3px 0 0 var(--r-signal); }
+
 .runner .r-hand {
-  font-size: 12px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
-  padding: 5px 14px; border-radius: 999px;
-  border: 1.5px solid currentColor;
+  font-size: 9px; font-weight: 400; letter-spacing: 0.24em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: var(--r-s);
+  border: var(--hair) solid currentColor;
 }
-.runner.hand-L .r-hand { color: #f0a24e; }
-.runner.hand-R .r-hand { color: #5b8ff9; }
-.runner.is-pickup.hand-L { box-shadow: inset 0 3px 0 0 #f0a24e; }
-.runner.is-pickup.hand-R { box-shadow: inset 0 3px 0 0 #5b8ff9; }
-.runner .r-foot .btn span { pointer-events: none; }
-.runner .btn { box-shadow: none; }
-.set-counter { font-size: 15px; color: #8888a0; margin-bottom: 6px; font-weight: 600; }
-.done-stop { color: #ff6b6b; font-weight: 800; font-size: 20px; }
-#r-quit {
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.1);
-  color: #8888a0; font-size: 13px; font-weight: 700;
-  padding: 7px 16px; border-radius: 20px; cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center; outline: none;
-}
-#r-quit:hover, #r-quit:active { background: rgba(255,255,255,0.13); color: #eeeef5; }
+.runner.hand-L .r-hand { color: var(--r-hand-l); }
+.runner.hand-R .r-hand { color: var(--r-hand-r); }
+.runner.is-pickup.hand-L { box-shadow: inset 0 3px 0 0 var(--r-hand-l); }
+.runner.is-pickup.hand-R { box-shadow: inset 0 3px 0 0 var(--r-hand-r); }
 
-/* ---- Charts ---- */
+.runner .r-foot .btn span { pointer-events: none; }
+.set-counter {
+  font-size: 9.5px; color: var(--r-dim); margin-bottom: 8px; font-weight: 400;
+  letter-spacing: 0.2em; text-transform: uppercase;
+}
+.done-stop {
+  font-family: var(--font-display);
+  color: var(--r-alarm); font-weight: 300; font-size: 22px; letter-spacing: 0.1em;
+}
+
+/* Runner-scoped control overrides: same forms, dark ground. */
+.runner .btn {
+  background: var(--r-signal); border-color: var(--r-signal);
+  color: #10131A; box-shadow: none;
+}
+.runner .btn:active { background: #5876C9; border-color: #5876C9; }
+.runner .btn.secondary, .runner .btn.ghost {
+  background: transparent; border-color: var(--r-line); color: var(--r-dim);
+}
+.runner .btn.secondary:active, .runner .btn.ghost:active { background: rgba(255,255,255,0.05); }
+.runner .btn.danger { background: var(--r-alarm); border-color: var(--r-alarm); color: #17110E; }
+.runner .stepper button {
+  background: transparent; border-color: var(--r-line); color: var(--r-signal);
+}
+.runner .stepper .val { color: var(--r-ink); }
+.runner .rate button {
+  background: transparent; border-color: var(--r-line); color: var(--r-dim);
+}
+.runner .rate button.sel { background: var(--r-signal); border-color: var(--r-signal); color: #10131A; }
+.runner .micro, .runner .hint, .runner .muted { color: var(--r-faint); }
+.runner .card {
+  background: rgba(255,255,255,0.03); border-color: var(--r-line); color: var(--r-ink);
+}
+.runner .r-note { color: var(--r-dim); }
+.runner .r-flag { color: var(--r-alarm); }
+.runner .r-ok { color: var(--r-signal); }
+
+#r-quit {
+  background: transparent;
+  border: var(--hair) solid var(--r-line);
+  color: var(--r-dim);
+  font-family: var(--font-mono);
+  font-size: 9px; font-weight: 400; letter-spacing: 0.18em; text-transform: uppercase;
+  padding: 6px 12px; border-radius: var(--r-s); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; outline: none;
+  flex: none;
+}
+#r-quit:hover, #r-quit:active { background: rgba(255,255,255,0.06); color: var(--r-ink); }
+
+/* ============================================================
+   CHARTS
+   ============================================================ */
+
 svg.chart { width: 100%; height: auto; display: block; touch-action: none; }
-.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; font-weight: 600; color: var(--dc-ink-sub); margin: 6px 0; }
-.legend .sw { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+.legend {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  font-size: 9px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--li-ink-3); margin: 8px 0 2px;
+}
+.legend .sw {
+  display: inline-block; width: 12px; height: 2px; vertical-align: middle;
+  margin-right: 6px; border-radius: 0;
+}
 
 .chart-tip {
   position: fixed; z-index: 9999; pointer-events: none; opacity: 0;
   transform: translate(-50%, -100%); transition: opacity .08s;
-  background: var(--dc-surface);
-  border: 2px solid var(--dc-line);
-  color: var(--dc-ink); font-size: 12px; font-weight: 600; line-height: 1.35; padding: 7px 10px;
-  border-radius: 10px; white-space: nowrap;
-  box-shadow: 0 4px 0 var(--dc-line);
+  background: var(--li-surface);
+  border: var(--hair) solid var(--li-ink);
+  color: var(--li-ink);
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 400; line-height: 1.5; padding: 6px 9px;
+  border-radius: var(--r-s); white-space: nowrap;
+  box-shadow: none;
   font-variant-numeric: tabular-nums;
 }
-.chart-tip b { font-weight: 800; }
+.chart-tip b { font-weight: 700; }
 
-/* ---- Misc ---- */
-.hr { height: 2px; background: var(--dc-line-soft); margin: 16px 0; border: none; border-radius: 2px; }
+/* ============================================================
+   MISC
+   ============================================================ */
+
+.hr { height: var(--hair); background: var(--li-line); margin: 18px 0; border: none; border-radius: 0; }
 .center { text-align: center; }
 .spacer { height: 8px; }
 
-/* ---- Settings footer ---- */
 .settings-footer {
-  margin-top: 36px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  margin-top: 40px; padding-top: 18px;
+  border-top: var(--hair) solid var(--li-line);
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
 }
 .settings-logo {
-  width: 48px; height: 48px; border-radius: 14px;
-  border: 2px solid var(--dc-line);
-  box-shadow: 0 3px 0 var(--dc-line);
-  background: var(--dc-surface);
+  width: 44px; height: 44px; border-radius: var(--r-s);
+  border: var(--hair) solid var(--li-line);
+  background: var(--li-surface);
+}
+
+/* Selection stays in the family. */
+::selection { background: var(--li-signal-mute); color: var(--li-ink); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

@@ -1,9 +1,13 @@
 /* sw.js — offline app-shell cache. Bump CACHE on any asset change. */
-const CACHE = 'ft-v54';
+const CACHE = 'ft-v55';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
+  './fonts/jura-light.woff2',
+  './fonts/jura-medium.woff2',
+  './fonts/geistmono-regular.woff2',
+  './fonts/geistmono-bold.woff2',
   './motion.css',
   './motion.js',
   './cone.js',

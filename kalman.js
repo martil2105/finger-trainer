@@ -30,13 +30,13 @@
   var SVGNS = 'http://www.w3.org/2000/svg';
 
   var DEFAULT_COLORS = {
-    blue: '#3D87F5', blueDeep: '#2C67C2',
-    green: '#33B94F',
-    amber: '#F6C445', amberStrong: '#F6A723', amberText: '#D98C0A',
-    red: '#F04E4E',
-    gray: '#A5A5BE', grid: '#EFEFF3',
-    ink: '#2E2E42', white: '#FFFFFF',
-    pillText: '#FFFFFF'
+    blue: '#1B3FA8', blueDeep: '#122C77',
+    green: '#1B3FA8',
+    amber: '#D9AE9C', amberStrong: '#B4441F', amberText: '#8C3416',
+    red: '#A9502F',
+    gray: '#606266', grid: '#E1DED4',
+    ink: '#1B1D21', white: '#F2F0E9',
+    pillText: '#F2F0E9'
   };
 
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -66,15 +66,15 @@
     s.id = 'cone-css';
     s.textContent =
       'svg.cone-chart{width:100%;height:auto;display:block;touch-action:none;' +
-      'font-family:ui-rounded,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}' +
-      'svg.cone-chart text{font-variant-numeric:tabular-nums}' +
+      'font-family:"LI Mono",ui-monospace,SFMono-Regular,Menlo,monospace}' +
+      'svg.cone-chart text{font-variant-numeric:tabular-nums;letter-spacing:0.04em}' +
       '.cone-tip{position:fixed;z-index:9999;pointer-events:none;opacity:0;' +
       'transform:translate(-50%,-100%);transition:opacity .08s;' +
-      'background:#FFFFFF;border:2px solid #E5E5EF;border-radius:10px;' +
-      'box-shadow:0 4px 0 #E5E5EF;padding:7px 10px;white-space:nowrap;' +
-      'font:600 12px/1.45 ui-rounded,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
-      'color:#2E2E42;font-variant-numeric:tabular-nums}' +
-      '.cone-tip b{font-weight:800}';
+      'background:#F2F0E9;border:1px solid #1B1D21;border-radius:2px;' +
+      'box-shadow:none;padding:6px 9px;white-space:nowrap;' +
+      'font:400 10px/1.5 "LI Mono",ui-monospace,SFMono-Regular,Menlo,monospace;' +
+      'color:#1B1D21;font-variant-numeric:tabular-nums}' +
+      '.cone-tip b{font-weight:700}';
     document.head.appendChild(s);
   }
 

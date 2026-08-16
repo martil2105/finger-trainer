@@ -728,8 +728,8 @@
       [`${cycle.name} · ${curWk ? `Week ${curWk} of ${weeks.length}` : `${weeks.length} weeks`}`]));
 
     // ---- cycle allocation card ----
-    const bandColor = { Accumulation: '#33B94F', Transmutation: '#3D87F5', Peak: '#F04E4E',
-                        Realization: '#9B6DF3', DeloadTest: '#F6A723', TopSet: '#3D87F5', Custom: '#A5A5BE' };
+    const bandColor = { Accumulation: '#CBC7BB', Transmutation: '#9A9CA1', Peak: '#5B5F66',
+                        Realization: '#1B1D21', DeloadTest: '#DFDBD0', TopSet: '#1B3FA8', Custom: '#E1DED4' };
     const bandTag = { Accumulation: 'ACCUM', Transmutation: 'TRANS', Peak: 'PEAK',
                       Realization: 'REAL', DeloadTest: 'TEST', TopSet: 'TOP', Custom: 'CUST' };
     const nextTest = weeks.find(w => w.isDeloadTest && w.weekNumber >= (curWk || 1));
@@ -761,7 +761,7 @@
     const track = el('div', { class: 'alloc-track' });
     const tags = el('div', { class: 'alloc-tags' });
     segs.forEach(s => {
-      const c = bandColor[s.type] || '#A5A5BE';
+      const c = bandColor[s.type] || '#606266';
       track.appendChild(el('div', { class: 'alloc-seg', style: `flex:${s.n};background:${c}` }));
       tags.appendChild(el('span', { class: 'alloc-tag', style: `flex:${s.n};color:${c}` },
         [bandTag[s.type] || String(s.type || '').toUpperCase().slice(0, 6)]));
@@ -968,7 +968,7 @@
   App.state.analyticsEdgeMm = null;     // null = auto-pick the most recent edge
   App.state.settingsEdgeMm = null;      // which edge the WM editors write to
 
-  const HAND_COLOR = { L: '#F0A24E', R: '#3D87F5' };   // same as the runner
+  const HAND_COLOR = { L: '#B4441F', R: '#1B3FA8' };   // same as the runner
   const HAND_NAME = { L: 'Left', R: 'Right' };
 
   async function renderAnalytics(view) {
@@ -1146,7 +1146,7 @@
     ]));
     if (combined.length >= 2) {
       hero.appendChild(lineChart([
-        { pts: combined, color: '#3D87F5', name: '5s hang', trendColor: '#3D87F5' }
+        { pts: combined, color: '#1B3FA8', name: '5s hang', trendColor: '#1B3FA8' }
       ], 'kg', { movingAvg: true, prMarkers: true }));
       hero.appendChild(el('p', { class: 'card-note', style: 'margin:4px 0 0' },
         ['solid = 5s hangs · dashed/hollow = 3s hangs (5s-eq) · thin = trend · ' +
@@ -1170,7 +1170,7 @@
     if (r3raw.length >= 2) {
       const c3 = el('div', { class: 'card', style: 'margin-top:0' });
       c3.appendChild(lineChart([
-        { pts: r3raw, color: '#F04E4E', name: '3s raw', trendColor: '#F04E4E' }
+        { pts: r3raw, color: '#1B1D21', name: '3s raw', trendColor: '#606266' }
       ], 'kg', { movingAvg: true, prMarkers: true }));
       c3.appendChild(el('p', { class: 'card-note', style: 'margin:4px 0 0' },
         ['unnormalised 3s top-set E1RM · thin = trend']));
@@ -1223,20 +1223,20 @@
             [`${a1.toFixed(1)} avg` + (a0 != null ? ` · ${a1 - a0 >= 0 ? '+' : '−'}${Math.abs(a1 - a0).toFixed(1)}` : '')])
         : el('span', { class: 'tint-chip amber' }, ['no data'])
     ]));
-    const recColor = { 5: '#33B94F', 4: '#9BDCA8', 3: '#F6C445', 2: '#F58F8F', 1: '#F04E4E' };
+    const recColor = { 5: '#1B3FA8', 4: '#97A0BE', 3: '#CBC7BB', 2: '#CFA894', 1: '#B4441F' };
     const cells = el('div', { class: 'rec-cells' });
     const padN = 14 - last14.length;
     for (let i = 0; i < 14; i++) {
       const l = i < padN ? null : last14[i - padN];
       cells.appendChild(el('div', {
         class: 'rec-cell',
-        style: l ? `background:${recColor[l.nextDayFeel] || '#F0F0F6'}` : null,
+        style: l ? `background:${recColor[l.nextDayFeel] || '#DCD8CD'}` : null,
         role: 'img',
         'aria-label': l ? `${fmtDate(l.date)} — felt ${l.nextDayFeel} of 5` : 'no session'
       }));
     }
     fat.appendChild(cells);
-    fat.appendChild(el('p', { class: 'card-note', style: 'margin:0' }, ['self-rated after each session · green = fresh · red = wrecked']));
+    fat.appendChild(el('p', { class: 'card-note', style: 'margin:0' }, ['self-rated after each session · blue = fresh · rust = wrecked']));
     fat.appendChild(el('div', { class: 'card-divider' }));
     const byWeek = {};
     logs.forEach(l => {
@@ -1323,7 +1323,7 @@
           ? '5s history converted to 3s-equivalent ×' + durFactor.factor + ' (from your 5s→3s data)'
           : '5s history converted to 3s-equivalent ×' + durFactor.factor + ' (default — log more 3s to calibrate)';
         coneCard.appendChild(el('p', { class: 'card-note' }, [
-          'Projected 3s E1RM · ' + convNote + ' · green = adaptation range · red = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
+          'Projected 3s E1RM · ' + convNote + ' · upper field = adaptation range · lower field = fatigue range · rings = 90% benchmark intervals. Display only — does not affect anchors or WMs.'
         ]));
         view.appendChild(coneCard);
       }
@@ -1555,8 +1555,8 @@
         if (a != null && b != null) rawGap.push({ x: l.date, y: Calc.roundTo(b - a, 1) });
       });
       asymCard.appendChild(lineChart([
-        { pts: rawGap, color: '#C9C9D6', name: 'per session' },
-        { pts: paired.asym.map(p => ({ x: p.x, y: p.y })), color: '#7A5AF8', name: 'filtered', trendColor: '#7A5AF8' }
+        { pts: rawGap, color: '#C4C0B5', name: 'per session' },
+        { pts: paired.asym.map(p => ({ x: p.x, y: p.y })), color: '#1B3FA8', name: 'filtered', trendColor: '#606266' }
       ], 'kg', { movingAvg: false, prMarkers: false }));
       const a = paired.asymNow;
       // Factual, no corrective framing: an asymmetry is a measurement, not a
@@ -1883,16 +1883,16 @@
 
     // horizontal gridlines + y labels
     ticks.forEach(yv => {
-      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(yv), x2: W - padR, y2: yFor(yv), stroke: '#EFEFF3', 'stroke-width': 1.5 }));
-      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#A5A5BE', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
+      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(yv), x2: W - padR, y2: yFor(yv), stroke: '#E1DED4', 'stroke-width': 1.5 }));
+      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#606266', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
     });
     // axis title
-    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#A5A5BE', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
+    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#606266', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
     // x labels (thinned to ~6)
     const step = Math.max(1, Math.ceil(dates.length / 6));
     dates.forEach((dt, i) => {
       if (i % step !== 0 && i !== dates.length - 1) return;
-      const tx = svgNS('text', { x: xFor(dt), y: H - padB + 16, fill: '#A5A5BE', 'font-size': 10, 'text-anchor': 'middle' });
+      const tx = svgNS('text', { x: xFor(dt), y: H - padB + 16, fill: '#606266', 'font-size': 10, 'text-anchor': 'middle' });
       tx.textContent = fmtShort(dt); svg.appendChild(tx);
     });
 
@@ -1913,7 +1913,7 @@
             d += ` C ${cpX} ${prev.y}, ${cpX} ${p.y}, ${p.x} ${p.y}`;
           }
         });
-        const tColor = s.trendColor || '#A5A5BE';
+        const tColor = s.trendColor || '#606266';
         svg.appendChild(svgNS('path', { d, fill: 'none', stroke: tColor, 'stroke-width': 1.2, opacity: 0.4 }));
       }
       
@@ -1967,20 +1967,18 @@
           if (p.is3s === false) return; // skip point rendering if explicitly marked false
 
           if (isPR) {
-            const starText = svgNS('text', {
-              x: xFor(p.x),
-              y: yFor(p.y) - 9,
-              'text-anchor': 'middle',
-              'font-size': '12px',
-              style: 'pointer-events:none;user-select:none;'
-            });
-            starText.textContent = '⭐';
-            svg.appendChild(starText);
+            // A record is marked the way the plate marks one: a hollow
+            // oxide ring around the datum. No icon, no reward token.
+            svg.appendChild(svgNS('circle', {
+              cx: xFor(p.x), cy: yFor(p.y), r: 6.5,
+              fill: 'none', stroke: '#B4441F', 'stroke-width': 1.25,
+              style: 'pointer-events:none;'
+            }));
           }
 
           const cAttrs = {
             cx: xFor(p.x), cy: yFor(p.y), r: 4,
-            fill: p.is3s ? '#FFFFFF' : s.color, // surface fill makes the 3s marker hollow
+            fill: p.is3s ? '#F2F0E9' : s.color, // surface fill makes the 3s marker hollow
             stroke: s.color,
             'stroke-width': p.is3s ? 1.5 : 1
           };
@@ -2005,11 +2003,11 @@
       });
       const xline = svgNS('line', {
         x1: 0, x2: 0, y1: padT, y2: H - padB,
-        stroke: '#2E2E42', 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0
+        stroke: '#1B1D21', 'stroke-width': 2, 'stroke-linecap': 'round', opacity: 0
       });
       svg.appendChild(xline);
       const dots = series.map(s => {
-        const c = svgNS('circle', { r: 6, cx: 0, cy: 0, fill: '#FFFFFF', stroke: s.color, 'stroke-width': 3, opacity: 0 });
+        const c = svgNS('circle', { r: 6, cx: 0, cy: 0, fill: '#F2F0E9', stroke: s.color, 'stroke-width': 3, opacity: 0 });
         svg.appendChild(c);
         return c;
       });
@@ -2066,7 +2064,7 @@
 
   function barChart(bars, unit, opts) {
     opts = opts || {};
-    const color = opts.color || '#3D87F5';
+    const color = opts.color || '#1B3FA8';
     const W = 600, H = 240, padL = 42, padR = 14, padT = 14, padB = 38;
     const max = Math.max.apply(null, bars.map(b => b.value)) || 1;
     const ticks = niceTicks(0, max, opts.intY ? Math.min(5, max + 1) : 5).filter(t => t >= 0);
@@ -2076,10 +2074,10 @@
     const svg = svgNS('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
     // gridlines + y labels
     ticks.forEach(tv => {
-      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(tv), x2: W - padR, y2: yFor(tv), stroke: '#EFEFF3', 'stroke-width': 1.5 }));
-      const tx = svgNS('text', { x: padL - 6, y: yFor(tv) + 4, fill: '#A5A5BE', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = opts.intY ? Math.round(tv) : tv; svg.appendChild(tx);
+      svg.appendChild(svgNS('line', { x1: padL, y1: yFor(tv), x2: W - padR, y2: yFor(tv), stroke: '#E1DED4', 'stroke-width': 1.5 }));
+      const tx = svgNS('text', { x: padL - 6, y: yFor(tv) + 4, fill: '#606266', 'font-size': 11, 'text-anchor': 'end' }); tx.textContent = opts.intY ? Math.round(tv) : tv; svg.appendChild(tx);
     });
-    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#A5A5BE', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
+    const axt = svgNS('text', { x: 12, y: padT + 4, fill: '#606266', 'font-size': 10 }); axt.textContent = unit; svg.appendChild(axt);
     bars.forEach((b, i) => {
       const h = (b.value / ymax) * (H - padT - padB);
       const x = padL + i * bw + Math.min(6, bw * 0.12);
@@ -2093,12 +2091,12 @@
       svg.appendChild(hit);
       // value label on top
       if (bars.length <= 14) {
-        const vt = svgNS('text', { x: x + rw / 2, y: H - padB - h - 4, fill: '#2E2E42', 'font-size': 10, 'font-weight': 700, 'text-anchor': 'middle' }); vt.textContent = b.value; svg.appendChild(vt);
+        const vt = svgNS('text', { x: x + rw / 2, y: H - padB - h - 4, fill: '#1B1D21', 'font-size': 10, 'font-weight': 700, 'text-anchor': 'middle' }); vt.textContent = b.value; svg.appendChild(vt);
       }
       // x label (thinned)
       const lblStep = Math.max(1, Math.ceil(bars.length / 8));
       if (i % lblStep === 0 || i === bars.length - 1) {
-        const tx = svgNS('text', { x: x + rw / 2, y: H - padB + 16, fill: '#A5A5BE', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = b.label; svg.appendChild(tx);
+        const tx = svgNS('text', { x: x + rw / 2, y: H - padB + 16, fill: '#606266', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = b.label; svg.appendChild(tx);
       }
     });
     return svg;
@@ -2110,26 +2108,26 @@
     const yFor = (y) => H - padB - ((y - 1) / 4) * (H - padT - padB);
     const svg = svgNS('svg', { viewBox: `0 0 ${W} ${H}`, class: 'chart' });
     // zones: green>=4, amber 3, red<=2
-    [['#33B94F', 4, 5, 'Good'], ['#F6A723', 3, 4, 'OK'], ['#F04E4E', 1, 3, 'Sore']].forEach(z => {
+    [['#606266', 4, 5, 'Good'], ['#C9A08C', 3, 4, 'OK'], ['#B4441F', 1, 3, 'Sore']].forEach(z => {
       svg.appendChild(svgNS('rect', { x: padL, y: yFor(z[2]), width: W - padL - padR, height: yFor(z[1]) - yFor(z[2]), fill: z[0], opacity: 0.08 }));
       const lt = svgNS('text', { x: W - padR - 2, y: yFor((z[1] + z[2]) / 2) + 4, fill: z[0], 'font-size': 10, 'text-anchor': 'end', opacity: 0.7 }); lt.textContent = z[3]; svg.appendChild(lt);
     });
     // y ticks 1..5
     [1, 2, 3, 4, 5].forEach(yv => {
-      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#A5A5BE', 'font-size': 10, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
+      const tx = svgNS('text', { x: padL - 6, y: yFor(yv) + 4, fill: '#606266', 'font-size': 10, 'text-anchor': 'end' }); tx.textContent = yv; svg.appendChild(tx);
     });
     // x labels
     const step = Math.max(1, Math.ceil(pts.length / 6));
     pts.forEach((p, i) => {
       if (i % step !== 0 && i !== pts.length - 1) return;
-      const tx = svgNS('text', { x: xFor(i), y: H - padB + 16, fill: '#A5A5BE', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = fmtShort(p.x); svg.appendChild(tx);
+      const tx = svgNS('text', { x: xFor(i), y: H - padB + 16, fill: '#606266', 'font-size': 10, 'text-anchor': 'middle' }); tx.textContent = fmtShort(p.x); svg.appendChild(tx);
     });
     let d = '';
     pts.forEach((p, i) => { d += (i ? ' L' : 'M') + xFor(i) + ' ' + yFor(p.y); });
-    svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#C9CDDA', 'stroke-width': 2 }));
+    svg.appendChild(svgNS('path', { d, fill: 'none', stroke: '#C4C0B5', 'stroke-width': 1.5 }));
     pts.forEach((p, i) => {
       const c = svgNS('circle', { cx: xFor(i), cy: yFor(p.y), r: 4,
-        fill: p.y >= 4 ? '#33B94F' : p.y === 3 ? '#F6A723' : '#F04E4E', stroke: '#FFFFFF', 'stroke-width': 1.5 });
+        fill: p.y >= 4 ? '#1B3FA8' : p.y === 3 ? '#CBC7BB' : '#B4441F', stroke: '#F2F0E9', 'stroke-width': 1.5 });
       svg.appendChild(c);
 
       // Large transparent hit target for easy pointing/touch on mobile

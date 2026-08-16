@@ -45,14 +45,14 @@
      Any key can be overridden per call via options.colors —
      e.g. grid/gray/ink/white/pillText for a dark theme. ---- */
   var DEFAULT_COLORS = {
-    blue: '#3D87F5', blueDeep: '#2C67C2',      // historical data
-    green: '#33B94F',                          // optimal-adaptation side
-    amber: '#F6C445', amberStrong: '#F6A723',  // warning side, targets
-    amberText: '#D98C0A',
-    red: '#F04E4E',                            // fatigue / overtraining edge
-    gray: '#A5A5BE', grid: '#EFEFF3',          // median, gridlines
-    ink: '#2E2E42', white: '#FFFFFF',          // NOW marker, node outlines
-    pillText: '#FFFFFF'                        // text inside the NOW pill
+    blue: '#1B3FA8', blueDeep: '#122C77',      // historical data
+    green: '#1B3FA8',                          // optimal-adaptation side
+    amber: '#C08A6E', amberStrong: '#B4441F',  // warning side, targets
+    amberText: '#8C3416',
+    red: '#A9502F',                            // fatigue / overtraining edge
+    gray: '#606266', grid: '#E1DED4',          // median, gridlines
+    ink: '#1B1D21', white: '#F2F0E9',          // NOW marker, node outlines
+    pillText: '#F2F0E9'                        // text inside the NOW pill
   };
 
   var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -82,15 +82,15 @@
     s.id = 'cone-css';
     s.textContent =
       'svg.cone-chart{width:100%;height:auto;display:block;touch-action:none;' +
-      'font-family:ui-rounded,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}' +
-      'svg.cone-chart text{font-variant-numeric:tabular-nums}' +
+      'font-family:"LI Mono",ui-monospace,SFMono-Regular,Menlo,monospace}' +
+      'svg.cone-chart text{font-variant-numeric:tabular-nums;letter-spacing:0.04em}' +
       '.cone-tip{position:fixed;z-index:9999;pointer-events:none;opacity:0;' +
       'transform:translate(-50%,-100%);transition:opacity .08s;' +
-      'background:#FFFFFF;border:2px solid #E5E5EF;border-radius:10px;' +
-      'box-shadow:0 4px 0 #E5E5EF;padding:7px 10px;white-space:nowrap;' +
-      'font:600 12px/1.45 ui-rounded,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
-      'color:#2E2E42;font-variant-numeric:tabular-nums}' +
-      '.cone-tip b{font-weight:800}';
+      'background:#F2F0E9;border:1px solid #1B1D21;border-radius:2px;' +
+      'box-shadow:none;padding:6px 9px;white-space:nowrap;' +
+      'font:400 10px/1.5 "LI Mono",ui-monospace,SFMono-Regular,Menlo,monospace;' +
+      'color:#1B1D21;font-variant-numeric:tabular-nums}' +
+      '.cone-tip b{font-weight:700}';
     document.head.appendChild(s);
   }
 
@@ -240,7 +240,7 @@
        adaptation (green); lower half = fatigue (amber inner, red on
        the outermost, most pessimistic band). ---- */
     bands.forEach(function (b, i) {
-      var op = Math.min(0.34, 0.10 + i * 0.10);
+      var op = Math.min(0.20, 0.055 + i * 0.06);
       if (median.length > 1) {
         svgEl('path', { d: areaD(b.upper, median), fill: C.green, 'fill-opacity': op }, svg);
         svgEl('path', { d: areaD(median, b.lower), fill: (i === 0 ? C.red : C.amber), 'fill-opacity': op }, svg);
@@ -252,11 +252,11 @@
     if (bands.length) {
       svgEl('path', {
         d: lineD(bands[0].upper), fill: 'none', stroke: C.green,
-        'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        'stroke-width': 1, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
       }, svg);
       svgEl('path', {
         d: lineD(bands[0].lower), fill: 'none', stroke: C.red,
-        'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        'stroke-width': 1, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
       }, svg);
     }
 

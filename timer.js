@@ -468,12 +468,12 @@
     lines.push(effortLabel());
     const wrap = shell('', {
       body: `<div class="phase">Get ready</div>
-             <div style="font-size:22px;margin:14px 0;font-weight:700">${p.role}</div>
-             <div style="color:#9a9aa8">${lines.join(' · ')}</div>
-             ${p.protocol === 'fixedVolume' ? '<div style="color:#f7b955;margin-top:14px">Fixed sets — no extensions. RPE creep: if @8.5+ by set 3, drop load 5%.</div>' : ''}
-             ${p.protocol === 'topSetPlusBackoffs' ? '<div style="color:#f7b955;margin-top:14px">Fatigue stop rule is active for back-offs.</div>' : ''}
-             ${p.protocol === 'maxSingles' ? '<div style="color:#ff6b6b;margin-top:14px">Max singles — full rest, no back-offs.</div>' : ''}
-             ${R.readiness && R.readiness.note ? '<div style="color:' + (R.readiness.factor < 1 ? '#f7b955' : '#4ecb71') + ';margin-top:14px">' + R.readiness.note + '</div>' : ''}`,
+             <div class="r-title">${p.role}</div>
+             <div class="r-note">${lines.join(' · ')}</div>
+             ${p.protocol === 'fixedVolume' ? '<div class="r-flag" style="margin-top:14px">Fixed sets — no extensions. RPE creep: if @8.5+ by set 3, drop load 5%.</div>' : ''}
+             ${p.protocol === 'topSetPlusBackoffs' ? '<div class="r-flag" style="margin-top:14px">Fatigue stop rule is active for back-offs.</div>' : ''}
+             ${p.protocol === 'maxSingles' ? '<div class="r-flag" style="margin-top:14px">Max singles — full rest, no back-offs.</div>' : ''}
+             ${R.readiness && R.readiness.note ? '<div class="' + (R.readiness.factor < 1 ? 'r-flag' : 'r-ok') + '" style="margin-top:14px">' + R.readiness.note + '</div>' : ''}`,
       foot: `<button class="btn" id="r-ready">Ready — start countdown</button>
              <p class="muted center">Keep the screen on. Audio cues will guide you.</p>`
     });
@@ -503,10 +503,10 @@
     const wrap = shell('', {
       body: `<div class="phase">Get ready</div>
              <div style="font-size:26px;margin:12px 0 4px;font-weight:800">${HAND_LABEL[R.hand]} hand</div>
-             <div style="color:#9a9aa8">${lines.join(' · ')}</div>
-             <div style="color:#9a9aa8;margin-top:6px">${effortLabel()}</div>
-             <div style="color:#f7b955;margin-top:14px">${guidance}</div>
-             <div style="color:#9a9aa8;margin-top:10px;font-size:13px">Ramp to the weight over ~2s. No snatch.</div>`,
+             <div class="r-note">${lines.join(' · ')}</div>
+             <div class="r-note" style="margin-top:6px">${effortLabel()}</div>
+             <div class="r-flag" style="margin-top:14px">${guidance}</div>
+             <div class="r-note" style="margin-top:10px;font-size:11px">Ramp to the weight over ~2s. No snatch.</div>`,
       foot: `<button class="btn" id="r-ready">Ready — start countdown</button>
              <p class="muted center">Keep the screen on. Audio cues will guide you.</p>`
     });
